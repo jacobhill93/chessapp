@@ -524,12 +524,68 @@ stockfish-0yn0tt` and merged into this branch.
        rather than duplicating it) in its own panel section below the
        move list.
 
-## Possible future addition: Lichess puzzle database
+9. **Real tactical motif detection + unrelated-puzzle drilling** — IN
+   PROGRESS, on branch `claude/ui-implementation`. Upgrades the coarse
+   4-bucket motif heuristic from stage 7 (`missed_mate`/`walked_into_mate`/
+   `hung_material`/`positional`) with real geometric tactic detection, and
+   adds a second training mode: not just replaying your own flagged
+   mistake (stage 6, already built), but drilling an *unrelated* puzzle
+   that exhibits the same motif, pulled from Lichess's public puzzle
+   database.
 
-Not yet decided/scheduled. Chess.com's API only exposes a given player's own
-games — no general puzzle or master-game datasets. If we want training
-exercises beyond the user's own flagged mistakes, Lichess publishes an open
-puzzle database (public file dump at `database.lichess.org`, no auth
-needed — millions of tactics with FEN, solution moves, rating, and themes
-like fork/pin/endgame). Would set up a Lichess API connection only if/when
-we decide we need this.
+   **Decision: build motif detection natively in TypeScript, not as a
+   Python subprocess.** Considered wrapping
+   [chess-detect](https://github.com/aslyamov/chess_detect) (MIT,
+   python-chess–based, does real per-move geometric tactic detection —
+   fork/pin/skewer/discovered-check/etc., unlike
+   [Chess-Tactic-Finder](https://github.com/JakimPL/Chess-Tactic-Finder),
+   which only finds "puzzle-worthy" moments via the same eval-gap logic
+   we already built for stage 8's "great move" feature, and whose own
+   docs admit theme classification is unsolved) as a subprocess, same
+   pattern as Stockfish. Rejected once the user raised multi-user hosting
+   as a real future consideration: unlike Stockfish (a native binary with
+   no alternative), Python is a second full language runtime the deploy
+   image would need, and every concurrent "Analyze" click would spawn
+   *two* subprocesses instead of one, doubling whatever
+   pooling/queueing solution concurrent Stockfish usage will eventually
+   need anyway. Porting the relevant detectors to native TS runs in the
+   same Node process — zero added subprocess/deploy cost — at the price
+   of real porting effort instead of a drop-in dependency. Using
+   `chess-detect`'s source as an algorithm reference (not a dependency)
+   during the port, including its README's example FEN per motif as a
+   ready-made spot-check test set.
+
+   **Motif coverage tracker** (update as detectors land — this table is
+   the answer to "did we cover X yet" across context resets):
+
+   | Motif | In `chess-detect`? | Ported to our TS? |
+   | --- | --- | --- |
+   | Fork | yes | not yet |
+   | Pin | yes | not yet |
+   | Skewer | yes | not yet |
+   | Discovered check | yes | not yet |
+   | Double check | yes | not yet |
+   | Trapped piece | yes | not yet (not in Phase 1 scope) |
+   | Hanging capture | yes | not yet (not in Phase 1 scope — overlaps our existing `hung_material` heuristic) |
+   | Removing defender (material/mate) | yes | not yet (not in Phase 1 scope) |
+   | Exploiting pin | yes | not yet (not in Phase 1 scope) |
+   | Open file / doubled / isolated pawns | yes (strategic, not tactical) | not yet (not in Phase 1 scope) |
+   | Back-rank (mate/weakness) | **no — not in chess-detect at all** | not yet — we design this one ourselves |
+   | Zugzwang | **no — not in chess-detect at all** | deferred indefinitely — no clean geometric signature, genuinely hard even for engines (needs null-move-style comparison); Lichess's own puzzle generator relies on human review, not pure automation, for exactly this class of judgment call |
+   | Deflection, decoy, zwischenzug, general discovered attack, smothered mate | **no — on chess-detect's own "Planned" list, unimplemented upstream too** | not planned yet |
+
+   **Planned phases** (Phase 1 is the dependency for everything else):
+   1. Native detectors for fork/pin/skewer/discovered check/double check
+      (ported) + back-rank (built from scratch) — **in progress**.
+   2. Wire results into `motif.ts`, replacing/extending the 4-bucket
+      heuristic. New labels named to match Lichess's own theme strings
+      (`fork`, `pin`, `skewer`, `discoveredAttack`, `doubleCheck`,
+      `backRankMate`) from the start so there's no translation layer
+      later.
+   3. Ingest the Lichess puzzle database (`database.lichess.org`, public,
+      no auth) for the "drill an unrelated puzzle" mode. Millions of
+      rows — flat JSON files (this project's pattern for games/analysis)
+      won't hold up; needs a real index, likely SQLite, queried by theme.
+   4. New training-mode UI sourcing a puzzle FEN from that index instead
+      of the user's own game, reusing stage 6's move-validation/attempt
+      logic.
