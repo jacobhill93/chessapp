@@ -560,28 +560,72 @@ stockfish-0yn0tt` and merged into this branch.
 
    | Motif | In `chess-detect`? | Ported to our TS? |
    | --- | --- | --- |
-   | Fork | yes | not yet |
-   | Pin | yes | not yet |
-   | Skewer | yes | not yet |
-   | Discovered check | yes | not yet |
-   | Double check | yes | not yet |
+   | Fork | yes | **yes** — `src/lib/tactics/detectors/fork.ts` |
+   | Pin | yes | **yes** — `src/lib/tactics/detectors/pin.ts` |
+   | Skewer | yes | **yes** — `src/lib/tactics/detectors/skewer.ts` |
+   | Discovered check | yes | **yes** — `src/lib/tactics/detectors/discoveredCheck.ts` |
+   | Double check | yes | **yes** — `src/lib/tactics/detectors/doubleCheck.ts` |
    | Trapped piece | yes | not yet (not in Phase 1 scope) |
    | Hanging capture | yes | not yet (not in Phase 1 scope — overlaps our existing `hung_material` heuristic) |
    | Removing defender (material/mate) | yes | not yet (not in Phase 1 scope) |
    | Exploiting pin | yes | not yet (not in Phase 1 scope) |
    | Open file / doubled / isolated pawns | yes (strategic, not tactical) | not yet (not in Phase 1 scope) |
-   | Back-rank (mate/weakness) | **no — not in chess-detect at all** | not yet — we design this one ourselves |
+   | Back-rank mate | **no — not in chess-detect at all** | **yes** — `src/lib/tactics/detectors/backRank.ts`, built from scratch. Narrow on purpose: only flags a checkmate actually delivered by a rook/queen along the king's own back rank, not an unconverted back-rank *threat* (that needs searching for a threat that didn't happen — bigger feature, not done) |
    | Zugzwang | **no — not in chess-detect at all** | deferred indefinitely — no clean geometric signature, genuinely hard even for engines (needs null-move-style comparison); Lichess's own puzzle generator relies on human review, not pure automation, for exactly this class of judgment call |
    | Deflection, decoy, zwischenzug, general discovered attack, smothered mate | **no — on chess-detect's own "Planned" list, unimplemented upstream too** | not planned yet |
 
+   **Phase 1 — DONE.** Built under `src/lib/tactics/`:
+   - `context.ts`: `buildMoveContext(fenBefore, from, to, promotion)` — the
+     TS equivalent of chess-detect's `MoveContext`. Loads `fenBefore` and
+     (via a scratch `chess.js` instance with `.move()` applied) `fenAfter`
+     directly rather than replaying, since every `ParsedMove` already
+     carries both FENs — simpler than the Python original's board-copy-and-
+     push approach and gets en passant/castling metadata for free from
+     chess.js's `Move` object instead of hand-rolling it. `chess.js`'s
+     `attackers(square, color)` turned out to be exactly python-chess's
+     `board.attackers()` (raw attack pattern, not legal-move-filtered), so
+     `squaresAttackedFrom()` (our `piece_attacks` equivalent) is built on
+     top of it directly.
+   - `rays.ts`: `castRay`/`squaresBetween`/`findRelativePin`/
+     `isPieceVulnerable` — direct ports of chess-detect's `utils.py` ray
+     utilities.
+   - `detectors/{fork,pin,skewer,discoveredCheck,doubleCheck}.ts`: line-
+     for-line ports of chess-detect's corresponding detector logic (see
+     the Russian-commented source fetched from
+     `github.com/aslyamov/chess_detect` for reference — comments in our
+     versions are in English and explain the *why*, not a translation of
+     the original comments). One naming note for Phase 2: our
+     `discoveredCheck` only fires when the moved piece delivers a check
+     that reveals *another* checking piece (chess-detect's own scope) —
+     it does not cover a general "discovered attack" that doesn't involve
+     check at all. When mapping to Lichess's `discoveredAttack` theme in
+     Phase 2, this detector alone under-covers that theme; may need a
+     non-check variant later if that gap matters in practice.
+   - `detectors/backRank.ts`: from-scratch back-rank mate detector (see
+     tracker row above for exact scope).
+   - `index.ts`: `detectTactics(fenBefore, from, to, promotion)` runs all
+     six detectors and returns every hit (a move can match more than one,
+     e.g. a discovered check that's also a fork).
+   - Verified two ways: (1) hand-built FEN spot-checks for all six motifs
+     (one per detector, plus a double-check-without-discovered-check
+     negative case confirming chess-detect's stricter "moved piece must
+     add independent value" rule for `discoveredCheck`) — all pass; (2) a
+     crash-test sweep of `detectTactics` across every move of 11 real
+     cached games (387 moves total, `data/positions/jph093/*.json`) — zero
+     exceptions, 39 tactic hits found (20 pins, 15 forks, 4 skewers; no
+     discovered/double checks or back-rank mates in this particular
+     sample, which is plausible — they're rarer patterns). Not yet wired
+     into `motif.ts`/the UI — that's Phase 2.
+
    **Planned phases** (Phase 1 is the dependency for everything else):
-   1. Native detectors for fork/pin/skewer/discovered check/double check
-      (ported) + back-rank (built from scratch) — **in progress**.
+   1. ~~Native detectors for fork/pin/skewer/discovered check/double
+      check (ported) + back-rank (built from scratch).~~ **DONE** — see
+      above.
    2. Wire results into `motif.ts`, replacing/extending the 4-bucket
       heuristic. New labels named to match Lichess's own theme strings
       (`fork`, `pin`, `skewer`, `discoveredAttack`, `doubleCheck`,
       `backRankMate`) from the start so there's no translation layer
-      later.
+      later. **Next up.**
    3. Ingest the Lichess puzzle database (`database.lichess.org`, public,
       no auth) for the "drill an unrelated puzzle" mode. Millions of
       rows — flat JSON files (this project's pattern for games/analysis)
