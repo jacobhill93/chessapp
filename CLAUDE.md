@@ -91,6 +91,23 @@ stockfish-0yn0tt` and merged into this branch.
        `package.json` since it's a genuine no-op with no proxy configured
        (confirmed safe on the same Windows machine); it's the
        cert-path-shaped assumption that didn't hold, not the proxy one.
+     - **A third, unrelated TLS issue surfaced on that same Windows
+       machine after the fix above**: `UNABLE_TO_GET_ISSUER_CERT_LOCALLY`
+       persisted on plain chess.com fetches even with the sandbox's cert
+       hack fully removed — this one had nothing to do with our sandbox
+       at all. Real-world cause: something on the user's own Windows
+       machine (antivirus with HTTPS/SSL scanning, or a corporate/VPN
+       proxy — very common) intercepts TLS and presents a certificate
+       signed by a locally-installed root CA; Windows and browsers trust
+       it via the OS certificate store, but Node's `fetch` doesn't
+       consult that store by default. Fix: Node 22's `--use-system-ca`
+       flag, which makes Node also trust the OS trust store. Confirmed
+       working on the affected machine, then baked into `package.json`'s
+       `dev`/`start` scripts (`NODE_OPTIONS=--use-system-ca`, via
+       `cross-env`) since this is a genuinely common class of local
+       Windows setup, not sandbox-specific — added an `engines.node
+       ">=22"` field alongside it since the flag doesn't exist on older
+       Node.
 3. **Game parsing & storage model** — DONE, pushed on
    `claude/chess-com-api-j9dxyc`.
    - Uses `chess.js` (v1) to replay each game's PGN; its verbose move
