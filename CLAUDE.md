@@ -221,9 +221,55 @@ native UCI engine process from the backend.
      move (400, not persisted to history) — all against the Scholar's
      Mate game's `Nf6??` blunder.
    - **No UI changes in this stage either**, same reasoning as stage 5.
-7. **Progress tracking / weak-spot dashboard** — aggregate mistakes over
-   time (by opening, phase of game, motif) to show patterns and
-   improvement.
+7. **Weak-spot tally by motif** — DONE (backend only), pushed on
+   `claude/chess-com-api-j9dxyc`. Descoped from the original plan's
+   "progress tracking / weak-spot dashboard" per user direction: a simple
+   tally by named motif, not a time-series trend tracker.
+   - `src/lib/motif.ts`: `classifyMotif(move, nextMove)` tags a flagged
+     move with one of four cheap heuristic categories — deliberately
+     simple pattern-matching on data already computed, not real tactic
+     recognition (no fork/pin/skewer detection):
+     - `missed_mate` — mover had a forced mate available (`evalBefore`)
+       and didn't keep it.
+     - `walked_into_mate` — the move let the opponent force mate when
+       that wasn't already the case.
+     - `hung_material` — approximation: the very next move in the game
+       (already-computed `bestMove` of the following `MoveAnalysis`,
+       i.e. the engine's top reply right after the mistake) targets a
+       square where one of the mover's own pieces worth ≥300cp (knight
+       or greater) now sits. This is a coarse proxy, not a real
+       exchange evaluation — it can flag an even trade, and won't catch
+       material lost a few moves later — but it's cheap (`chess.js`
+       only, zero extra Stockfish calls) and matched real blunders well
+       in testing (e.g. a queen and a knight both correctly flagged
+       across two different real games).
+     - `positional` — catch-all fallback for anything not matching the
+       above.
+   - `src/lib/mistakes.ts`'s `getMistakesForUser` now attaches `motif` to
+     each returned mistake (computed using the full per-game move array
+     so `nextMove` lookups work, before filtering down to just the
+     flagged ones).
+   - `src/lib/weakSpots.ts`: `getWeakSpotSummary(username, { minSeverity })`
+     groups a user's already-cached flagged mistakes by motif and tallies
+     `count`, `avgCentipawnLoss`, `drilledCount` (has ≥1 recorded drill
+     attempt — see stage 6), and `resolvedCount` (most recent attempt
+     came back `best`/`good`). Computes each mistake's drill status
+     concurrently first, then aggregates in a plain synchronous loop —
+     aggregating inside the concurrent map itself would race, since two
+     mistakes sharing a motif could both read the same not-yet-inserted
+     tally before either writes it back and silently drop one update.
+     `GET /api/weak-spots?username=...&minSeverity=...` exposes this.
+   - Verified against real games: `walked_into_mate` and `missed_mate`
+     correctly identified via mate-score transitions (including a real
+     missed mate-in-2, where the player captured a pawn with check
+     instead of the mating move and the eval dropped from forced mate to
+     "only" +9.59), and `hung_material` correctly flagged on two separate
+     real blunders (a hung queen, a hung knight).
+   - **No UI changes in this stage either**, same reasoning as stages 5–6.
+   - Scope note: real tactic-pattern recognition (actual fork/pin/skewer
+     detection via attack-line analysis) was considered and explicitly
+     declined in favor of these cheaper heuristics — revisit if the
+     coarser categories turn out not to be useful enough in practice.
 
 ## Possible future addition: Lichess puzzle database
 

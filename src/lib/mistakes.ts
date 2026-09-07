@@ -6,12 +6,14 @@ import {
   MoveAnalysis,
   MoveClassification,
 } from "./analysis";
+import { classifyMotif, Motif } from "./motif";
 
 const DATA_DIR = path.join(process.cwd(), "data", "analysis");
 
 export interface Mistake extends MoveAnalysis {
   uuid: string;
   depth: number;
+  motif: Motif;
 }
 
 function meetsMinSeverity(
@@ -63,11 +65,12 @@ export async function getMistakesForUser(
     const contents = await readFile(path.join(dir, file), "utf-8");
     const analysis = JSON.parse(contents) as GameAnalysis;
 
-    for (const move of analysis.moves) {
+    analysis.moves.forEach((move, index) => {
       if (meetsMinSeverity(move.classification, minSeverity)) {
-        mistakes.push({ ...move, uuid, depth });
+        const motif = classifyMotif(move, analysis.moves[index + 1]);
+        mistakes.push({ ...move, uuid, depth, motif });
       }
-    }
+    });
   }
 
   mistakes.sort((a, b) => b.centipawnLoss - a.centipawnLoss);
