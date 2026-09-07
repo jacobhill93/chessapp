@@ -13,7 +13,8 @@ native UCI engine process from the backend.
 1. **Project scaffolding** — DONE. Next.js + TS app created via
    create-next-app, builds cleanly, pushed on
    `claude/chess-training-stockfish-0yn0tt`.
-2. **Chess.com data ingestion** — IN PROGRESS, blocked (see below).
+2. **Chess.com data ingestion** — DONE, pushed on
+   `claude/chess-com-api-j9dxyc`.
    - Decision: hit chess.com's public REST API directly
      (`https://api.chess.com/pub/player/{username}/games/{yyyy}/{mm}`,
      archives list at `.../games/archives`), rather than depending on a
@@ -26,27 +27,36 @@ native UCI engine process from the backend.
    - Use a descriptive User-Agent header on requests, e.g.
      `ChessTrainingApp/0.1 (contact: jph093@gmail.com)` — chess.com asks for
      this.
-   - **Blocker hit**: this session's environment network policy denied
-     egress to `api.chess.com` at the proxy's CONNECT step (confirmed via
-     `curl -sS "$HTTPS_PROXY/__agentproxy/status"` showing
-     `connect_rejected` / org policy denial — chess.com itself never saw
-     the request). The user updated the environment's network policy to
-     allow all domains, but the change did not take effect in the
-     already-running container (same uptime, same proxy allowlist
-     before/after). Network policy appears to apply at container
-     provisioning time, so it needs a **new session** (fresh container) to
-     pick up the updated policy.
-   - **Next step when resuming in a new session**: first sanity-check
-     with `curl -s -A "ChessTrainingApp/0.1 (contact: jph093@gmail.com)"
-     "https://api.chess.com/pub/player/jph093/games/archives"` to confirm
-     egress now works. Once confirmed, build:
-     - `src/lib/chesscom.ts` — typed client: list archives, fetch a
-       month's games (PGN + metadata).
-     - An API route (e.g. `src/app/api/games/route.ts`) that fetches games
-       for a username and returns them.
-     - Local persistence under a gitignored `data/` directory so games
-       aren't re-fetched every time.
-     - A minimal page to trigger a fetch and list the games.
+   - Built: `src/lib/chesscom.ts` (typed client: archives + per-month
+     games), `src/lib/gameStore.ts` (disk cache under gitignored
+     `data/games/{username}/{yyyy}-{mm}.json` — every month except the
+     current in-progress one is immutable on chess.com's side, so those
+     are cached and never re-fetched), `src/app/api/games/route.ts`
+     (`GET /api/games?username=...`), and a minimal fetch-and-list UI on
+     `src/app/page.tsx`. Verified end-to-end against `jph093` (4060 real
+     games) including a screenshot of the rendered page.
+   - **Environment network notes for future sessions in this environment**:
+     - The environment's network egress policy must be set to allow the
+       needed domain(s) (e.g. `api.chess.com`) — this is an **environment**
+       setting (on code.claude.com/claude.ai, tied to the environment used
+       to create the session), not a `File → Settings` app preference, not
+       an env var, and unrelated to the local machine's own network/admin
+       state. It also only takes effect in a **new** container — an
+       already-running session won't pick up a change made after it
+       started.
+     - Separately, **Node's built-in `fetch` (undici) does not honor
+       `HTTPS_PROXY`/`HTTP_PROXY` env vars by default**, even though `curl`
+       does. In this sandboxed environment, outbound traffic goes through
+       an agent proxy exposed via `HTTPS_PROXY`; without opting in, Node's
+       `fetch` bypasses it and hits a separate, stricter transparent
+       egress filter directly (returns a `403` with a
+       "Host not in allowlist" body). Fix: run Node with
+       `NODE_USE_ENV_PROXY=1` (Node 22's experimental env-proxy support),
+       which makes `fetch` route through `HTTPS_PROXY` like `curl` does.
+       This is now baked into the `dev` and `start` npm scripts in
+       `package.json` — harmless in environments with no proxy configured
+       (e.g. real deployment), required here for any Node code (API
+       routes, scripts) that calls external APIs during development.
 3. **Game parsing & storage model** — parse PGNs into structured
    positions/moves (FEN, move played, clock time, etc.) so individual
    positions can be queried later.
