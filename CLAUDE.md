@@ -463,6 +463,54 @@ stockfish-0yn0tt` and merged into this branch.
      large accounts can have thousands of games — not yet a measured
      problem, just an unaddressed one).
 
+   - **"Great move" tier — DONE**, added after the initial UI pass, per
+     user request to mirror chess.com's distinction between an ordinary
+     best move and a "Great move" (the correct move in a critical spot
+     where anything else would have swung the game hard).
+     - `src/lib/stockfish.ts`: `StockfishSession.evaluate()` gained a
+       `multiPv` option. Requesting `multiPv: 2` makes Stockfish report
+       two ranked lines (`info ... multipv 1 ...` / `multipv 2 ...`)
+       instead of one; `EngineEvaluation` gained `secondBestScore` (the
+       second line's score) alongside the existing top-line `score`.
+       Internally this needed real restructuring, not just a new field:
+       the single `lastScore`/`lastPv`/`lastDepth` accumulators on a
+       pending evaluation became a `Map<multipvIndex, PvSlot>`, since
+       lines for both ranks interleave as depth increases and the old
+       code would've just let rank 2's lines clobber rank 1's. Verified
+       against raw UCI output before trusting it (`multipv N` tokens
+       parse exactly as expected; Stockfish's default `MultiPV` UCI
+       option is 1, so this is opt-in and free for every other caller —
+       `/api/evaluate` and the drill flow's single-shot `evaluatePosition`
+       are unaffected).
+     - `src/lib/analysis.ts`: `analyzeGame` now requests `multiPv: 2` for
+       every evaluation (each position already serves double duty as one
+       move's "after" and the next move's "before" — see the N+1 note
+       above — so there's no cheaper way to get this for only "before"
+       positions). Added `criticalityGap` to `MoveAnalysis` (mover's-
+       perspective centipawn gap between the best and second-best line;
+       null when there's no real alternative, e.g. only one legal move).
+       A "best"-classified move (≤10cp loss) upgrades to a new `"great"`
+       classification when that gap is ≥150cp (`GREAT_MOVE_GAP_CP`).
+       Added `"great"` to `MoveClassification` and
+       `CLASSIFICATION_SEVERITY_ORDER` (least severe, ahead of `"best"` —
+       doesn't affect `mistakes.ts`/`weakSpots.ts` filtering, since both
+       already default to `minSeverity: "mistake"`, well above this end
+       of the scale).
+     - Verified against real games: the Scholar's Mate's mating move
+       (`Qxf7#`) and a separate game's 3-move forced-mate sequence
+       (`Qxf7+`, `Nxe6+`) all correctly upgraded from `"best"` to
+       `"great"`; a genuine "only move to avoid getting mated" (`Ke7`,
+       evaluated at a merely-bad-but-not-lost cp score vs. a mate-losing
+       alternative) also correctly flagged; ordinary solid moves in the
+       same games stayed `"best"`.
+     - UI: `MoveList.tsx` now renders `"best"` as a `lucide-react`
+       `ThumbsUp` icon (matching `DESIGN.md` section 6's icon guidance)
+       and keeps the `!` text glyph exclusively for `"great"`, so the two
+       are visually distinct at a glance rather than both showing `!`.
+       The hover tooltip on a `"great"` move states the avoided swing
+       (e.g. "the only one avoiding a 291cp swing") instead of the plain
+       centipawn-loss text other moves show.
+
 ## Possible future addition: Lichess puzzle database
 
 Not yet decided/scheduled. Chess.com's API only exposes a given player's own

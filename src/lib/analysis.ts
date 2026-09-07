@@ -2,6 +2,7 @@ import type { ParsedGame, ParsedMove } from "./gameParser";
 import { EngineScore, StockfishSession } from "./stockfish";
 
 export type MoveClassification =
+  | "great"
   | "best"
   | "good"
   | "inaccuracy"
@@ -10,6 +11,7 @@ export type MoveClassification =
 
 /** Ascending severity order, matching classifyMove's thresholds. */
 export const CLASSIFICATION_SEVERITY_ORDER: MoveClassification[] = [
+  "great",
   "best",
   "good",
   "inaccuracy",
@@ -32,6 +34,14 @@ export interface MoveAnalysis {
   /** Engine's top choice from the position before this move, in UCI notation (e.g. "e2e4"). */
   bestMove: string;
   playedBestMove: boolean;
+  /**
+   * Centipawn gap (mover's perspective) between the best and second-best
+   * line before this move — how much worse any other move would have
+   * been. Null when not computed or when there was no real alternative
+   * (e.g. only one legal move). A large gap on a "best"-classified move
+   * upgrades it to "great" (see GREAT_MOVE_GAP_CP).
+   */
+  criticalityGap: number | null;
   /** White-perspective score of the position before this move. */
   evalBefore: EngineScore | null;
   /** White-perspective score of the position after this move. */
@@ -66,6 +76,14 @@ export function classifyMove(centipawnLoss: number): MoveClassification {
   if (centipawnLoss <= 200) return "mistake";
   return "blunder";
 }
+
+/**
+ * Minimum centipawn gap (mover's perspective) between the best and
+ * second-best line for a "best" move to be upgraded to "great" — mirrors
+ * chess.com's "Great move": the best move in a position where anything
+ * else would have swung the game hard, not just any correctly-played move.
+ */
+const GREAT_MOVE_GAP_CP = 150;
 
 /**
  * Rough phase heuristic: the first 10 full moves are the opening; past
@@ -103,17 +121,26 @@ export async function analyzeGame(
 
   try {
     const fenBeforeFirstMove = parsed.moves[0]?.fenBefore ?? STARTING_POSITION_FEN;
-    let previousEval = await session.evaluate(fenBeforeFirstMove, { depth });
+    let previousEval = await session.evaluate(fenBeforeFirstMove, { depth, multiPv: 2 });
 
     const moves: MoveAnalysis[] = [];
 
     for (const move of parsed.moves) {
-      const afterEval = await session.evaluate(move.fenAfter, { depth });
+      const afterEval = await session.evaluate(move.fenAfter, { depth, multiPv: 2 });
 
       const moverSign = move.color === "w" ? 1 : -1;
       const evalBeforeForMover = scoreToCentipawns(previousEval.score) * moverSign;
       const evalAfterForMover = scoreToCentipawns(afterEval.score) * moverSign;
       const centipawnLoss = Math.max(0, evalBeforeForMover - evalAfterForMover);
+
+      const criticalityGap = previousEval.secondBestScore
+        ? evalBeforeForMover - scoreToCentipawns(previousEval.secondBestScore) * moverSign
+        : null;
+
+      let classification = classifyMove(centipawnLoss);
+      if (classification === "best" && criticalityGap !== null && criticalityGap >= GREAT_MOVE_GAP_CP) {
+        classification = "great";
+      }
 
       moves.push({
         ply: move.ply,
@@ -122,10 +149,11 @@ export async function analyzeGame(
         fenBefore: move.fenBefore,
         fenAfter: move.fenAfter,
         centipawnLoss,
-        classification: classifyMove(centipawnLoss),
+        classification,
         phase: classifyPhase(move.fenBefore, move.moveNumber),
         bestMove: previousEval.bestMove,
         playedBestMove: toUciMove(move) === previousEval.bestMove,
+        criticalityGap,
         evalBefore: previousEval.score,
         evalAfter: afterEval.score,
       });

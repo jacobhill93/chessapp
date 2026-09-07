@@ -1,17 +1,26 @@
+import { ThumbsUp } from "lucide-react";
 import type { MoveAnalysis, MoveClassification } from "@/lib/analysis";
 import type { ParsedMove } from "@/lib/gameParser";
 import styles from "./MoveList.module.css";
 
-function glyphFor(classification: MoveClassification | undefined) {
+type Glyph =
+  | { kind: "icon"; Icon: typeof ThumbsUp; className: string }
+  | { kind: "text"; symbol: string; className: string };
+
+function glyphFor(classification: MoveClassification | undefined): Glyph | null {
   switch (classification) {
+    case "great":
+      // The best move in a critical spot — another move would have swung
+      // the game hard. Mirrors chess.com's "Great move".
+      return { kind: "text", symbol: "!", className: styles.glyphBest };
     case "best":
-      return { symbol: "!", className: styles.glyphBest };
+      return { kind: "icon", Icon: ThumbsUp, className: styles.glyphBest };
     case "inaccuracy":
-      return { symbol: "?!", className: styles.glyphWarn };
+      return { kind: "text", symbol: "?!", className: styles.glyphWarn };
     case "mistake":
-      return { symbol: "?", className: styles.glyphWarn };
+      return { kind: "text", symbol: "?", className: styles.glyphWarn };
     case "blunder":
-      return { symbol: "??", className: styles.glyphBlunder };
+      return { kind: "text", symbol: "??", className: styles.glyphBlunder };
     default:
       return null;
   }
@@ -29,7 +38,12 @@ function MoveButton({
   onSelect: () => void;
 }) {
   const glyph = glyphFor(analysis?.classification);
-  const title = analysis ? `${analysis.centipawnLoss}cp lost` : undefined;
+  const title =
+    analysis?.classification === "great" && analysis.criticalityGap !== null
+      ? `Great move — the only one avoiding a ${Math.round(analysis.criticalityGap)}cp swing`
+      : analysis
+        ? `${analysis.centipawnLoss}cp lost`
+        : undefined;
 
   return (
     <button
@@ -39,7 +53,12 @@ function MoveButton({
       title={title}
     >
       {move.san}
-      {glyph && <span className={`${styles.glyph} ${glyph.className}`}>{glyph.symbol}</span>}
+      {glyph &&
+        (glyph.kind === "icon" ? (
+          <glyph.Icon size={12} className={`${styles.glyph} ${glyph.className}`} />
+        ) : (
+          <span className={`${styles.glyph} ${glyph.className}`}>{glyph.symbol}</span>
+        ))}
     </button>
   );
 }

@@ -21,6 +21,8 @@ export interface EngineEvaluation {
   depth: number;
   score: EngineScore | null;
   pv: string[];
+  /** Score of the engine's second-best line, only populated when evaluate() was called with multiPv >= 2 (null if not requested, or no alternative line existed — e.g. only one legal move). */
+  secondBestScore: EngineScore | null;
 }
 
 const STOCKFISH_PATH = process.env.STOCKFISH_PATH ?? "/usr/games/stockfish";
@@ -31,13 +33,18 @@ function sideToMove(fen: string): "w" | "b" {
   return turn === "b" ? "b" : "w";
 }
 
+interface PvSlot {
+  depth: number;
+  score: EngineScore | null;
+  pv: string[];
+}
+
 interface PendingEvaluation {
   flipSign: boolean;
   resolve: (evaluation: EngineEvaluation) => void;
   reject: (err: Error) => void;
-  lastDepth: number;
-  lastScore: EngineScore | null;
-  lastPv: string[];
+  /** Keyed by UCI's 1-indexed "multipv N" rank; slot 1 is always the primary line. */
+  pvSlots: Map<number, PvSlot>;
   timeout: NodeJS.Timeout;
 }
 
@@ -52,6 +59,7 @@ export class StockfishSession {
   private readonly rl: Interface;
   private readonly ready: Promise<void>;
   private pending: PendingEvaluation | null = null;
+  private currentMultiPv = 1;
 
   constructor() {
     this.engine = spawn(/* turbopackIgnore: true */ STOCKFISH_PATH);
@@ -99,14 +107,18 @@ export class StockfishSession {
 
     if (line.startsWith("info depth")) {
       const depthMatch = line.match(/\bdepth (\d+)/);
+      const multipvMatch = line.match(/\bmultipv (\d+)/);
       const cpMatch = line.match(/\bscore cp (-?\d+)/);
       const mateMatch = line.match(/\bscore mate (-?\d+)/);
       const pvMatch = line.match(/ pv (.+)$/);
 
-      if (depthMatch) p.lastDepth = Number(depthMatch[1]);
+      const pvIndex = multipvMatch ? Number(multipvMatch[1]) : 1;
+      const slot: PvSlot = p.pvSlots.get(pvIndex) ?? { depth: 0, score: null, pv: [] };
+
+      if (depthMatch) slot.depth = Number(depthMatch[1]);
       if (cpMatch) {
         const value = Number(cpMatch[1]);
-        p.lastScore = { type: "cp", value: p.flipSign ? -value : value };
+        slot.score = { type: "cp", value: p.flipSign ? -value : value };
       } else if (mateMatch) {
         // Raw value is relative to the side to move: positive means that
         // side delivers the mate, negative means they get mated. At
@@ -118,20 +130,30 @@ export class StockfishSession {
         const sideToMove = p.flipSign ? "b" : "w";
         const otherSide = sideToMove === "w" ? "b" : "w";
         const favors = rawValue === 0 ? otherSide : rawValue > 0 ? sideToMove : otherSide;
-        p.lastScore = { type: "mate", value: Math.abs(rawValue), favors };
+        slot.score = { type: "mate", value: Math.abs(rawValue), favors };
       }
-      if (pvMatch) p.lastPv = pvMatch[1].trim().split(" ");
+      if (pvMatch) slot.pv = pvMatch[1].trim().split(" ");
+
+      p.pvSlots.set(pvIndex, slot);
     } else if (line.startsWith("bestmove")) {
       const bestMove = line.split(" ")[1];
       clearTimeout(p.timeout);
       this.pending = null;
-      p.resolve({ bestMove, depth: p.lastDepth, score: p.lastScore, pv: p.lastPv });
+      const primary = p.pvSlots.get(1);
+      const secondary = p.pvSlots.get(2);
+      p.resolve({
+        bestMove,
+        depth: primary?.depth ?? 0,
+        score: primary?.score ?? null,
+        pv: primary?.pv ?? [],
+        secondBestScore: secondary?.score ?? null,
+      });
     }
   }
 
   async evaluate(
     fen: string,
-    options: { depth?: number; movetimeMs?: number } = {},
+    options: { depth?: number; movetimeMs?: number; multiPv?: number } = {},
   ): Promise<EngineEvaluation> {
     await this.ready;
 
@@ -139,6 +161,12 @@ export class StockfishSession {
       throw new Error(
         "StockfishSession.evaluate called while a previous evaluation is still in flight",
       );
+    }
+
+    const multiPv = options.multiPv ?? 1;
+    if (multiPv !== this.currentMultiPv) {
+      this.send(`setoption name MultiPV value ${multiPv}`);
+      this.currentMultiPv = multiPv;
     }
 
     const goCommand = options.depth
@@ -156,9 +184,7 @@ export class StockfishSession {
         flipSign,
         resolve,
         reject,
-        lastDepth: 0,
-        lastScore: null,
-        lastPv: [],
+        pvSlots: new Map(),
         timeout,
       };
       this.send(`position fen ${fen}`);
