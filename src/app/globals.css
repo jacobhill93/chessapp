@@ -1,13 +1,131 @@
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light dark;
+
+  /* ── Ground ───────────────────────────────────────────── */
+  --bone:        #f6f2ea;  /* page background */
+  --sand:        #ece5d7;  /* raised surface: cards, panels, inputs */
+  --sand-deep:   #ded5c2;  /* pressed / inset / table stripe */
+  --edge:        #cec4ad;  /* 1px borders, dividers */
+
+  /* ── Ink ──────────────────────────────────────────────── */
+  --ink:         #1a1917;  /* primary text */
+  --ink-2:       #4d4a43;  /* secondary text, labels */
+  --ink-3:       #7b766b;  /* tertiary, placeholder, disabled label */
+
+  /* ── Juniper (primary accent) ─────────────────────────── */
+  --jun-100:     #e6ece6;
+  --jun-200:     #c9d6cb;
+  --jun-300:     #a3b8a8;
+  --jun-400:     #7b9482;
+  --jun-500:     #57705c;  /* base — board dark squares, primary fill */
+  --jun-600:     #445a49;  /* hover */
+  --jun-700:     #334537;  /* pressed, text-on-tint */
+  --jun-800:     #223026;
+
+  /* ── Sky (secondary accent) — dusty desert sky, not a UI blue ── */
+  --sky-100:     #e8eff5;
+  --sky-200:     #cbdce8;
+  --sky-300:     #a4bfd1;
+  --sky-400:     #7ba0b8;
+  --sky-500:     #5c85a0;  /* base — data series, informational chrome */
+  --sky-600:     #486d87;  /* hover */
+  --sky-700:     #37556c;  /* text-on-tint */
+  --sky-800:     #263e50;
+
+  /* ── Semantic (move quality, status) ──────────────────── */
+  --rust-500:    #a6552f;  /* blunder, destructive, check */
+  --rust-100:    #f3e2d8;
+  --ocher-500:   #b8862f;  /* inaccuracy, warning, last-move highlight */
+  --ocher-100:   #f4ead3;
+  --good:        var(--jun-500);   /* best / excellent move */
+  --good-tint:   var(--jun-100);
+
+  /* ── Board ────────────────────────────────────────────── */
+  --sq-light:    #ede4d2;
+  --sq-dark:     #57705c;
+  --piece-white: #f9f6f0;
+  --piece-black: #23231f;
+  --piece-edge:  #1a1917;  /* outline on both colors, 1.5px equivalent */
+
+  /* ── Type ─────────────────────────────────────────────── */
+  --font-sans: var(--font-sans-src), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-src), ui-monospace, monospace;
+
+  /* ── Space — 4px base, no half-steps ──────────────────── */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
+  --s-5: 24px; --s-6: 32px; --s-7: 48px; --s-8: 64px;
+
+  /* ── Radius — restrained; this is not a soft product ──── */
+  --r-sm: 3px;   /* chips, inputs, small controls */
+  --r-md: 6px;   /* buttons, cards, panels */
+  --r-lg: 10px;  /* dialogs, the board frame */
+
+  /* ── Elevation — ink-tinted, barely there ─────────────── */
+  --sh-1: 0 1px 2px rgba(26, 25, 23, 0.07);
+  --sh-2: 0 4px 14px rgba(26, 25, 23, 0.10);
+  --sh-3: 0 18px 44px rgba(26, 25, 23, 0.18);
 }
 
+/* System dark mode is the "auto" default — wins unless a manual
+   [data-theme="light"] override is set on <html>. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    --bone: #1a1917; --sand: #232219; --sand-deep: #2d2b24; --edge: #3d3a31;
+    --ink: #ede7da;  --ink-2: #b3ab9a;  --ink-3: #837c6d;
+
+    --jun-100: #232c25; --jun-200: #2f3d33; --jun-300: #486051;
+    --jun-400: #6d8b76; --jun-500: #8da894; --jun-600: #a3bba9;
+    --jun-700: #c2d3c6; --jun-800: #dde7e0;
+
+    --sky-100: #1c252e; --sky-200: #28343f; --sky-300: #3c5366;
+    --sky-400: #61879e; --sky-500: #8cadc3; --sky-600: #a7c3d3;
+    --sky-700: #c5d9e5; --sky-800: #dfeaf1;
+
+    --rust-500: #cf7a4d; --rust-100: #33211a;
+    --ocher-500: #d8a851; --ocher-100: #332a19;
+
+    --sq-light: #c2b79f; --sq-dark: #4a6050;
+    --piece-white: #f2eee5; --piece-black: #191814; --piece-edge: #0f0e0c;
+
+    --sh-1: 0 1px 2px rgba(0,0,0,0.5);
+    --sh-2: 0 4px 14px rgba(0,0,0,0.55);
+    --sh-3: 0 18px 44px rgba(0,0,0,0.65);
   }
+}
+
+/* Manual [data-theme="dark"] override — wins even when the system is in
+   light mode. Kept in sync with the media-query block above. */
+:root[data-theme="dark"] {
+  --bone: #1a1917; --sand: #232219; --sand-deep: #2d2b24; --edge: #3d3a31;
+  --ink: #ede7da;  --ink-2: #b3ab9a;  --ink-3: #837c6d;
+
+  --jun-100: #232c25; --jun-200: #2f3d33; --jun-300: #486051;
+  --jun-400: #6d8b76; --jun-500: #8da894; --jun-600: #a3bba9;
+  --jun-700: #c2d3c6; --jun-800: #dde7e0;
+
+  --sky-100: #1c252e; --sky-200: #28343f; --sky-300: #3c5366;
+  --sky-400: #61879e; --sky-500: #8cadc3; --sky-600: #a7c3d3;
+  --sky-700: #c5d9e5; --sky-800: #dfeaf1;
+
+  --rust-500: #cf7a4d; --rust-100: #33211a;
+  --ocher-500: #d8a851; --ocher-100: #332a19;
+
+  --sq-light: #c2b79f; --sq-dark: #4a6050;
+  --piece-white: #f2eee5; --piece-black: #191814; --piece-edge: #0f0e0c;
+
+  --sh-1: 0 1px 2px rgba(0,0,0,0.5);
+  --sh-2: 0 4px 14px rgba(0,0,0,0.55);
+  --sh-3: 0 18px 44px rgba(0,0,0,0.65);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
 }
 
 html {
@@ -22,19 +140,36 @@ body {
 
 body {
   min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--ink);
+  background: var(--bone);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-* {
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
+img,
+picture,
+video,
+canvas,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: none;
 }
 
 a {
@@ -42,8 +177,22 @@ a {
   text-decoration: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
+:focus-visible {
+  outline: 2px solid var(--jun-500);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--jun-200);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

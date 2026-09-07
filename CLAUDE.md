@@ -279,6 +279,56 @@ stockfish-0yn0tt` and merged into this branch.
      declined in favor of these cheaper heuristics — revisit if the
      coarser categories turn out not to be useful enough in practice.
 
+8. **UI implementation** — IN PROGRESS, on branch `claude/ui-implementation`
+   (branched off `claude/chess-com-api-j9dxyc` once it had `DESIGN.md`
+   merged in). Kept on its own branch, separate from the backend-work
+   branch, per user preference — architecturally `src/lib` (backend) vs
+   `src/app` (UI/routes) was already separated regardless, but a dedicated
+   branch makes this stage easy to review/rollback independently before
+   merging back. Working through `DESIGN.md` one slice at a time rather
+   than all at once, same "one stage at a time" approach as the backend
+   plan above.
+   - **Global elements — DONE.**
+     - `src/app/layout.tsx`: replaced the scaffold's Geist fonts with
+       `DESIGN.md`'s Archivo (variable font, `wdth` axis) + IBM Plex Mono
+       via `next/font/google`, loaded into `--font-sans-src`/
+       `--font-mono-src` CSS variables. Updated the leftover
+       create-next-app `metadata` (title/description) to the actual app.
+     - `src/app/globals.css`: replaced entirely with `DESIGN.md`'s token
+       block (`--bone`/`--sand`/`--ink`/juniper/sky/rust/ocher/board
+       tokens, spacing, radius, elevation) plus a base reset. `--font-sans`/
+       `--font-mono` reference the `next/font`-generated `*-src` variables
+       (with their auto-generated fallback-metrics font) rather than the
+       literal `"Archivo"` string `DESIGN.md`'s snippet shows standalone —
+       needed to actually wire `next/font`'s self-hosted loading into the
+       token system as the doc's own stack-context section intends.
+     - Implemented light/dark per `DESIGN.md`: base `:root` is light,
+       `@media (prefers-color-scheme: dark) { :root:not([data-theme="light"])
+       {...} }` is the "auto" default, and `:root[data-theme="dark"]` is
+       the manual-override block — so a future toggle setting `data-theme`
+       wins in both directions over system preference. Only the CSS side
+       of the manual override is built; there's no toggle control or
+       localStorage read/write yet since no component needs it yet (the
+       doc doesn't spec a toggle's location/appearance) — add that
+       plumbing when a real settings/nav component calls for it, rather
+       than wiring dead infrastructure now.
+     - Installed `lucide-react` (the icon library `DESIGN.md` section 6
+       names) as a dependency now, even though no component uses it yet —
+       a foundational/global choice, not per-component work.
+     - Minimal courtesy fix, not a redesign: `page.module.css`'s two
+       `var(--font-geist-*)` references (now-dangling since Geist was
+       removed) were repointed at `--font-sans`/`--font-mono` so the
+       still-unmigrated existing page doesn't lose its font entirely
+       before its own rebuild stage. Its layout/colors are untouched
+       (still the old scaffold's local hardcoded tokens) — confirmed via
+       screenshot that body background/text now follow the new global
+       tokens correctly in both light and dark, while the old page's own
+       `.page`/`.main` surface colors are intentionally still the
+       pre-existing scaffold ones, pending the next stage.
+   - **Next up**: rebuild the existing game-list page (`src/app/page.tsx`)
+     to spec (game cards, table, inputs, buttons from `DESIGN.md` section
+     5) before tackling the board component itself.
+
 ## Possible future addition: Lichess puzzle database
 
 Not yet decided/scheduled. Chess.com's API only exposes a given player's own
