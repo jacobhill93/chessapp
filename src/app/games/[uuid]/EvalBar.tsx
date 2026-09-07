@@ -17,14 +17,21 @@ function formatScore(score: EngineScore | null): string {
   return `${pawns > 0 ? "+" : ""}${pawns.toFixed(2)}`;
 }
 
-export function EvalBar({ score }: { score: EngineScore | null }) {
+export function EvalBar({ score, flipped = false }: { score: EngineScore | null; flipped?: boolean }) {
   const share = whiteShare(score);
 
   return (
     <div className={styles.wrapper}>
       <span className={styles.readout}>{formatScore(score)}</span>
       <div className={styles.bar} title="Evaluation, from White's perspective">
-        <div className={styles.whiteShare} style={{ height: `${share}%` }} />
+        <div
+          className={styles.whiteShare}
+          style={
+            flipped
+              ? { top: 0, height: `${share}%` }
+              : { bottom: 0, height: `${share}%` }
+          }
+        />
       </div>
     </div>
   );

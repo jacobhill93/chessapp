@@ -117,7 +117,7 @@ function BestMoveArrow({ move, flipped }: { move: BoardMove; flipped: boolean })
           refY="1.2"
           orient="auto"
         >
-          <path d="M0,0 L2.4,1.2 L0,2.4 z" fill="var(--jun-500)" />
+          <path d="M0,0 L2.4,1.2 L0,2.4 z" fill="var(--ocher-500)" />
         </marker>
       </defs>
       <line
@@ -125,7 +125,7 @@ function BestMoveArrow({ move, flipped }: { move: BoardMove; flipped: boolean })
         y1={from.y}
         x2={to.x}
         y2={to.y}
-        stroke="var(--jun-500)"
+        stroke="var(--ocher-500)"
         strokeWidth="0.12"
         strokeOpacity="0.7"
         strokeLinecap="round"

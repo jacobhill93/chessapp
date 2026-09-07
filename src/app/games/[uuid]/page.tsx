@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RotateCw } from "lucide-react";
 import { Board } from "@/app/board/Board";
 import { EvalBar } from "./EvalBar";
-import { MoveList } from "./MoveList";
+import { MoveGlyphLegend, MoveList } from "./MoveList";
 import type { ChessComGame } from "@/lib/chesscom";
 import type { ParsedGame } from "@/lib/gameParser";
 import type { GameAnalysis, MoveAnalysis } from "@/lib/analysis";
@@ -152,7 +152,7 @@ export default function GameReviewPage() {
           )}
 
           <div className={styles.boardRow}>
-            <EvalBar score={evalScore} />
+            <EvalBar score={evalScore} flipped={flipped} />
             <div className={styles.boardColumn}>
               <Board fen={currentFen} lastMove={lastMove} hintMove={hintMove} flipped={flipped} />
             </div>
@@ -235,6 +235,11 @@ export default function GameReviewPage() {
               />
             )}
           </div>
+        </div>
+
+        <div className={styles.panelSection} style={{ flex: "0 0 auto" }}>
+          <h2 className={styles.panelHeading}>Legend</h2>
+          <MoveGlyphLegend />
         </div>
       </section>
     </div>

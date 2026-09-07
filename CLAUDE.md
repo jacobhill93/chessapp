@@ -510,6 +510,19 @@ stockfish-0yn0tt` and merged into this branch.
        The hover tooltip on a `"great"` move states the avoided swing
        (e.g. "the only one avoiding a 291cp swing") instead of the plain
        centipawn-loss text other moves show.
+   - **Three follow-up polish requests — DONE.**
+     - `EvalBar` now takes a `flipped` prop and anchors White's fill to
+       whichever end of the bar White's pieces actually sit at (bottom
+       normally, top when the board is flipped), instead of always
+       anchoring White's share to the bottom regardless of orientation.
+     - The best-move hint arrow changed from `--jun-500` (green) to
+       `--ocher-500` (a calm gold) per direct feedback — updated in both
+       `Board.tsx` and `DESIGN.md`'s state-layer table so the doc stays
+       accurate.
+     - Added a glyph legend (`MoveGlyphLegend`, exported from
+       `MoveList.tsx` so it reuses the exact same glyph-rendering logic
+       rather than duplicating it) in its own panel section below the
+       move list.
 
 ## Possible future addition: Lichess puzzle database
 

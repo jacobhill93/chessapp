@@ -67,3 +67,24 @@
   color: var(--ink-3);
   font-size: 13px;
 }
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-4);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+
+.legendLabel {
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}

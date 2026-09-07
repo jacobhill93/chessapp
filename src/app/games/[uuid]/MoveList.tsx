@@ -26,6 +26,14 @@ function glyphFor(classification: MoveClassification | undefined): Glyph | null 
   }
 }
 
+function GlyphIcon({ glyph }: { glyph: Glyph }) {
+  return glyph.kind === "icon" ? (
+    <glyph.Icon size={12} className={`${styles.glyph} ${glyph.className}`} />
+  ) : (
+    <span className={`${styles.glyph} ${glyph.className}`}>{glyph.symbol}</span>
+  );
+}
+
 function MoveButton({
   move,
   analysis,
@@ -53,13 +61,34 @@ function MoveButton({
       title={title}
     >
       {move.san}
-      {glyph &&
-        (glyph.kind === "icon" ? (
-          <glyph.Icon size={12} className={`${styles.glyph} ${glyph.className}`} />
-        ) : (
-          <span className={`${styles.glyph} ${glyph.className}`}>{glyph.symbol}</span>
-        ))}
+      {glyph && <GlyphIcon glyph={glyph} />}
     </button>
+  );
+}
+
+const LEGEND_ITEMS: { classification: MoveClassification; label: string }[] = [
+  { classification: "great", label: "Great move" },
+  { classification: "best", label: "Best move" },
+  { classification: "inaccuracy", label: "Inaccuracy" },
+  { classification: "mistake", label: "Mistake" },
+  { classification: "blunder", label: "Blunder" },
+];
+
+/** Explains the move-quality glyphs shown in the move list. */
+export function MoveGlyphLegend() {
+  return (
+    <ul className={styles.legend}>
+      {LEGEND_ITEMS.map(({ classification, label }) => {
+        const glyph = glyphFor(classification);
+        if (!glyph) return null;
+        return (
+          <li key={classification} className={styles.legendItem}>
+            <GlyphIcon glyph={glyph} />
+            <span className={styles.legendLabel}>{label}</span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

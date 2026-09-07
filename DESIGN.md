@@ -227,7 +227,7 @@ piece disappears on a light square.
 | Legal destination (empty) | centered dot, 22% of square, `--ink` at 24% |
 | Legal destination (capture) | 4px inset ring, `--ink` at 24% |
 | Check | radial gradient from `--rust-500` at 55% center to transparent edge |
-| Best-move hint | 2px `--jun-500` arrow, 70% alpha, rounded cap |
+| Best-move hint | 2px `--ocher-500` arrow, 70% alpha, rounded cap |
 | Blunder marker (review) | `--rust-500` arrow, same geometry |
 | Premove | `--jun-400` at 20% alpha |
 | Hover (drag target) | inset 3px `--ink` at 12% |
