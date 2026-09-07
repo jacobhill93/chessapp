@@ -1,4 +1,5 @@
-import { spawn } from "node:child_process";
+import { ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { createInterface, Interface } from "node:readline";
 
 export interface EngineScore {
   type: "cp" | "mate";
@@ -21,82 +22,149 @@ function sideToMove(fen: string): "w" | "b" {
   return turn === "b" ? "b" : "w";
 }
 
+interface PendingEvaluation {
+  flipSign: boolean;
+  resolve: (evaluation: EngineEvaluation) => void;
+  reject: (err: Error) => void;
+  lastDepth: number;
+  lastScore: EngineScore | null;
+  lastPv: string[];
+  timeout: NodeJS.Timeout;
+}
+
 /**
- * Evaluates a position with a local Stockfish process over UCI.
- * Spawns and tears down one process per call; fine for interactive,
- * one-off evaluation, but batch analysis (e.g. a whole game) should reuse
- * a single long-lived process instead.
+ * A long-lived Stockfish process, kept open across many evaluate() calls so
+ * batch analysis (e.g. every position of a game) doesn't pay process-spawn
+ * overhead per position. Only one evaluate() call may be in flight at a
+ * time — callers must await each before starting the next.
  */
-export function evaluatePosition(
+export class StockfishSession {
+  private readonly engine: ChildProcessWithoutNullStreams;
+  private readonly rl: Interface;
+  private readonly ready: Promise<void>;
+  private pending: PendingEvaluation | null = null;
+
+  constructor() {
+    this.engine = spawn(/* turbopackIgnore: true */ STOCKFISH_PATH);
+    this.rl = createInterface({ input: this.engine.stdout });
+
+    this.ready = new Promise((resolve, reject) => {
+      const onError = (err: Error) => reject(err);
+      this.engine.once("error", onError);
+
+      const onStartupLine = (line: string) => {
+        if (line.startsWith("uciok")) {
+          this.send("isready");
+        } else if (line.startsWith("readyok")) {
+          this.engine.off("error", onError);
+          this.rl.off("line", onStartupLine);
+          this.rl.on("line", (l) => this.handleEvaluationLine(l));
+          resolve();
+        }
+      };
+
+      this.rl.on("line", onStartupLine);
+      this.send("uci");
+    });
+
+    this.engine.on("error", (err) => this.failPending(err));
+    this.engine.on("exit", () =>
+      this.failPending(new Error("Stockfish process exited unexpectedly")),
+    );
+  }
+
+  private send(command: string) {
+    this.engine.stdin.write(command + "\n");
+  }
+
+  private failPending(err: Error) {
+    if (!this.pending) return;
+    clearTimeout(this.pending.timeout);
+    this.pending.reject(err);
+    this.pending = null;
+  }
+
+  private handleEvaluationLine(line: string) {
+    const p = this.pending;
+    if (!p) return;
+
+    if (line.startsWith("info depth")) {
+      const depthMatch = line.match(/\bdepth (\d+)/);
+      const cpMatch = line.match(/\bscore cp (-?\d+)/);
+      const mateMatch = line.match(/\bscore mate (-?\d+)/);
+      const pvMatch = line.match(/ pv (.+)$/);
+
+      if (depthMatch) p.lastDepth = Number(depthMatch[1]);
+      if (cpMatch) {
+        const value = Number(cpMatch[1]);
+        p.lastScore = { type: "cp", value: p.flipSign ? -value : value };
+      } else if (mateMatch) {
+        const value = Number(mateMatch[1]);
+        p.lastScore = { type: "mate", value: p.flipSign ? -value : value };
+      }
+      if (pvMatch) p.lastPv = pvMatch[1].trim().split(" ");
+    } else if (line.startsWith("bestmove")) {
+      const bestMove = line.split(" ")[1];
+      clearTimeout(p.timeout);
+      this.pending = null;
+      p.resolve({ bestMove, depth: p.lastDepth, score: p.lastScore, pv: p.lastPv });
+    }
+  }
+
+  async evaluate(
+    fen: string,
+    options: { depth?: number; movetimeMs?: number } = {},
+  ): Promise<EngineEvaluation> {
+    await this.ready;
+
+    if (this.pending) {
+      throw new Error(
+        "StockfishSession.evaluate called while a previous evaluation is still in flight",
+      );
+    }
+
+    const goCommand = options.depth
+      ? `go depth ${options.depth}`
+      : `go movetime ${options.movetimeMs ?? 500}`;
+    const flipSign = sideToMove(fen) === "b";
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pending = null;
+        reject(new Error("Stockfish timed out"));
+      }, ENGINE_TIMEOUT_MS);
+
+      this.pending = {
+        flipSign,
+        resolve,
+        reject,
+        lastDepth: 0,
+        lastScore: null,
+        lastPv: [],
+        timeout,
+      };
+      this.send(`position fen ${fen}`);
+      this.send(goCommand);
+    });
+  }
+
+  quit() {
+    this.failPending(new Error("StockfishSession was quit while an evaluation was in flight"));
+    this.send("quit");
+    this.rl.close();
+    this.engine.kill();
+  }
+}
+
+/** Evaluates a single position, spawning and tearing down its own engine process. */
+export async function evaluatePosition(
   fen: string,
   options: { depth?: number; movetimeMs?: number } = {},
 ): Promise<EngineEvaluation> {
-  const goCommand = options.depth
-    ? `go depth ${options.depth}`
-    : `go movetime ${options.movetimeMs ?? 500}`;
-  const flipSign = sideToMove(fen) === "b";
-
-  return new Promise((resolve, reject) => {
-    const engine = spawn(/* turbopackIgnore: true */ STOCKFISH_PATH);
-    let buffer = "";
-    let lastDepth = 0;
-    let lastScore: EngineScore | null = null;
-    let lastPv: string[] = [];
-    let settled = false;
-
-    const timeout = setTimeout(() => {
-      finish(() => reject(new Error("Stockfish timed out")));
-    }, ENGINE_TIMEOUT_MS);
-
-    function send(command: string) {
-      engine.stdin.write(command + "\n");
-    }
-
-    function finish(action: () => void) {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      engine.kill();
-      action();
-    }
-
-    engine.on("error", (err) => finish(() => reject(err)));
-
-    engine.stdout.on("data", (chunk: Buffer) => {
-      buffer += chunk.toString();
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-
-      for (const line of lines) {
-        if (line.startsWith("uciok")) {
-          send("isready");
-        } else if (line.startsWith("readyok")) {
-          send(`position fen ${fen}`);
-          send(goCommand);
-        } else if (line.startsWith("info depth")) {
-          const depthMatch = line.match(/\bdepth (\d+)/);
-          const cpMatch = line.match(/\bscore cp (-?\d+)/);
-          const mateMatch = line.match(/\bscore mate (-?\d+)/);
-          const pvMatch = line.match(/ pv (.+)$/);
-
-          if (depthMatch) lastDepth = Number(depthMatch[1]);
-          if (cpMatch) {
-            const value = Number(cpMatch[1]);
-            lastScore = { type: "cp", value: flipSign ? -value : value };
-          } else if (mateMatch) {
-            const value = Number(mateMatch[1]);
-            lastScore = { type: "mate", value: flipSign ? -value : value };
-          }
-          if (pvMatch) lastPv = pvMatch[1].trim().split(" ");
-        } else if (line.startsWith("bestmove")) {
-          const bestMove = line.split(" ")[1];
-          finish(() =>
-            resolve({ bestMove, depth: lastDepth, score: lastScore, pv: lastPv }),
-          );
-        }
-      }
-    });
-
-    send("uci");
-  });
+  const session = new StockfishSession();
+  try {
+    return await session.evaluate(fen, options);
+  } finally {
+    session.quit();
+  }
 }

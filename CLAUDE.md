@@ -117,9 +117,58 @@ native UCI engine process from the backend.
      but stage 5's batch analysis (evaluating every position of every
      game) should reuse a single long-lived process instead of paying
      process-spawn overhead per position.
-5. **Mistake detection** — diff the user's actual moves against
-   Stockfish's top choice per position, flag high-centipawn-loss/blunder
-   moves, classify them (opening/middlegame/endgame, tactic type, etc.).
+5. **Mistake detection** — DONE (backend only — see note below), pushed
+   on `claude/chess-com-api-j9dxyc`.
+   - `src/lib/stockfish.ts` gained a `StockfishSession` class: one
+     long-lived engine process reused across many `evaluate()` calls
+     (`uci`/`isready` handshake once, then repeated `position fen ... / go
+     ...` round trips), replacing per-position process spawning for batch
+     work. `evaluatePosition()` (the single-shot function stage 4 added)
+     is now a thin wrapper around a one-off `StockfishSession` — same
+     behavior/signature, `/api/evaluate` unaffected. Only one `evaluate()`
+     call may be in flight per session at a time (fine — analysis is
+     inherently sequential, one move after another).
+   - `src/lib/analysis.ts`: `analyzeGame(parsedGame, { depth })` walks a
+     game's moves with one `StockfishSession`, evaluating the starting
+     position plus the result of each move — **N+1 engine calls for N
+     moves, not 2N**, since a move's "before" position is exactly the
+     previous move's "after" position (verified: consecutive
+     `evalAfter`/`evalBefore` pairs are identical in the tested output).
+     Per move, computes `centipawnLoss` (mover's-perspective eval drop
+     from the position before to the position after, clamped at 0),
+     buckets it into `classification` (best ≤10cp, good ≤50, inaccuracy
+     ≤100, mistake ≤200, else blunder — arbitrary but standard-ish
+     thresholds), tags a `phase` (opening = first 10 full moves;
+     otherwise endgame if ≤6 non-pawn/king pieces remain on the board,
+     else middlegame — a simple material-count heuristic, not a "real"
+     phase detector), and flags `playedBestMove` (actual move vs. the
+     engine's top choice, compared in UCI notation). Mate scores are
+     saturated to a large centipawn-equivalent (`100000 - movesToMate`)
+     so they diff sensibly against plain cp scores without special-casing
+     downstream.
+   - Verified against real games: a normal 17-ply game (values chain
+     correctly move-to-move, flagged inaccuracies match known
+     theory-inferior moves), a 0-move game (resignation before any move —
+     handled gracefully, empty `moves: []`, not a crash), and a real
+     Scholar's Mate (1.e4 e5 2.Qh5 Nc6 3.Bc4 Nf6?? 4.Qxf7#) — `Nf6` is
+     correctly flagged a huge blunder (walked into mate-in-1) and
+     `Qxf7#` is correctly `playedBestMove: true`.
+   - `src/lib/analysisStore.ts` + `GET /api/analysis?username=...&uuid=
+     ...&depth=...` cache to disk per `(username, uuid, depth)` under
+     gitignored `data/analysis/` — a re-analysis at a different depth is
+     intentionally a cache miss, since it isn't equivalent to a shallower
+     one. Default depth is 12 (`DEFAULT_ANALYSIS_DEPTH` in
+     `analysis.ts`); a 17-ply game analyzes in ~2s at that depth on this
+     machine, cached reads are ~0.5s.
+   - **No UI changes in this stage** — user is authoring a separate UI
+     design doc, so stage 5 stayed API/backend-only
+     (`analysis.ts`/`analysisStore.ts`/`api/analysis/route.ts`); wiring
+     this into the UI is follow-up work once that design lands.
+   - Scope note: tactic-motif classification (fork/pin/skewer/etc.) from
+     the plan's "etc." isn't implemented — it needs real board/attack
+     analysis, not just an eval diff, and felt like a separate, bigger
+     feature rather than part of a first mistake-detection pass. Revisit
+     later if wanted.
 6. **Training/replay mode** — surface a flagged position, let the user
    replay it against Stockfish from that point, track whether they find
    the better move this time.
