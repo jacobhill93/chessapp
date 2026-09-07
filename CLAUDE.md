@@ -8,6 +8,14 @@ engine, and helps the user drill positions where they made mistakes.
 Stack: Next.js (App Router) + TypeScript. Stockfish is invoked as a local
 native UCI engine process from the backend.
 
+UI work should follow `DESIGN.md` (repo root) — a normative design spec
+("high desert" aesthetic: juniper green on bone/sand, dusty sky blue for
+engine output, Archivo + IBM Plex Mono, flat Staunton pieces, no
+gradients/glass/emoji) covering tokens, layout, the board, every
+component, motion, accessibility, and copy tone. Read it before writing
+any component or CSS — it was authored on `claude/chess-training-
+stockfish-0yn0tt` and merged into this branch.
+
 ## Plan (work through with the user one stage at a time)
 
 1. **Project scaffolding** — DONE. Next.js + TS app created via
