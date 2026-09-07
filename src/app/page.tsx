@@ -2,134 +2,25 @@
 
 import { useState } from "react";
 import type { ChessComGame } from "@/lib/chesscom";
-import type { ParsedGame, ParsedMove } from "@/lib/gameParser";
-import type { EngineEvaluation } from "@/lib/stockfish";
+import type { Mistake } from "@/lib/mistakes";
+import { GameCard } from "./GameCard";
 import styles from "./page.module.css";
-
-function formatClock(seconds: number | null): string {
-  if (seconds === null) return "";
-  const m = Math.floor(seconds / 60);
-  const s = (seconds % 60).toFixed(1);
-  return `${m}:${s.padStart(4, "0")}`;
-}
-
-function formatScore(score: EngineEvaluation["score"]): string {
-  if (!score) return "?";
-  if (score.type === "mate") return `${score.favors === "b" ? "-" : ""}M${score.value}`;
-  return (score.value / 100).toFixed(2);
-}
-
-function MoveItem({ move }: { move: ParsedMove }) {
-  const [evaluation, setEvaluation] = useState<EngineEvaluation | null>(null);
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
-
-  async function evaluate() {
-    setStatus("loading");
-
-    try {
-      const res = await fetch(
-        `/api/evaluate?fen=${encodeURIComponent(move.fenAfter)}`,
-      );
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error ?? "Failed to evaluate position");
-      }
-
-      setEvaluation(data);
-      setStatus("idle");
-    } catch {
-      setStatus("error");
-    }
-  }
-
-  return (
-    <li style={{ listStyle: "none" }}>
-      {move.color === "w" ? `${move.moveNumber}.` : ""}
-      {move.san}
-      {move.clockSeconds !== null && ` (${formatClock(move.clockSeconds)})`}{" "}
-      {evaluation ? (
-        <span>
-          [{formatScore(evaluation.score)}, best {evaluation.bestMove}]
-        </span>
-      ) : (
-        <button onClick={evaluate} disabled={status === "loading"}>
-          {status === "loading" ? "..." : status === "error" ? "retry eval" : "eval"}
-        </button>
-      )}
-    </li>
-  );
-}
-
-function GameRow({ username, game }: { username: string; game: ChessComGame }) {
-  const [parsed, setParsed] = useState<ParsedGame | null>(null);
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
-  const [error, setError] = useState<string | null>(null);
-
-  async function toggleMoves() {
-    if (parsed) {
-      setParsed(null);
-      return;
-    }
-
-    setStatus("loading");
-    setError(null);
-
-    try {
-      const res = await fetch(
-        `/api/positions?username=${encodeURIComponent(username)}&uuid=${encodeURIComponent(game.uuid)}`,
-      );
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error ?? "Failed to parse game");
-      }
-
-      setParsed(data);
-      setStatus("idle");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to parse game");
-      setStatus("error");
-    }
-  }
-
-  const date = new Date(game.end_time * 1000).toLocaleDateString();
-  const result = game.pgn.match(/\[Result "(.*?)"\]/)?.[1];
-
-  return (
-    <li>
-      {date} — {game.white.username} ({game.white.rating}) vs{" "}
-      {game.black.username} ({game.black.rating}) — {game.time_class} —{" "}
-      {result}{" "}
-      <button onClick={toggleMoves} disabled={status === "loading"}>
-        {parsed ? "Hide moves" : status === "loading" ? "Parsing..." : "View moves"}
-      </button>
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
-      {parsed && (
-        <ol style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-          {parsed.moves.map((move) => (
-            <MoveItem key={move.ply} move={move} />
-          ))}
-        </ol>
-      )}
-    </li>
-  );
-}
 
 export default function Home() {
   const [username, setUsername] = useState("jph093");
   const [games, setGames] = useState<ChessComGame[]>([]);
+  const [mistakeCounts, setMistakeCounts] = useState<Map<string, number>>(new Map());
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
 
   async function fetchGames() {
     setStatus("loading");
     setError(null);
+    setHasSearched(true);
 
     try {
-      const res = await fetch(
-        `/api/games?username=${encodeURIComponent(username)}`,
-      );
+      const res = await fetch(`/api/games?username=${encodeURIComponent(username)}`);
       const data = await res.json();
 
       if (!res.ok) {
@@ -138,6 +29,20 @@ export default function Home() {
 
       setGames(data.games);
       setStatus("idle");
+
+      // Best-effort: show mistake counts for whatever's already been
+      // analyzed. Doesn't block the game list from rendering.
+      fetch(`/api/mistakes?username=${encodeURIComponent(username)}`)
+        .then((r) => r.json())
+        .then((mistakesData: { mistakes?: Mistake[] }) => {
+          if (!mistakesData.mistakes) return;
+          const counts = new Map<string, number>();
+          for (const mistake of mistakesData.mistakes) {
+            counts.set(mistake.uuid, (counts.get(mistake.uuid) ?? 0) + 1);
+          }
+          setMistakeCounts(counts);
+        })
+        .catch(() => {});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch games");
       setStatus("error");
@@ -147,35 +52,70 @@ export default function Home() {
   return (
     <div className={styles.page}>
       <main className={styles.main}>
-        <h1>Chess Training</h1>
+        <h1 className={styles.title}>Chess Training</h1>
 
         <form
+          className={styles.searchRow}
           onSubmit={(e) => {
             e.preventDefault();
             fetchGames();
           }}
-          style={{ display: "flex", gap: "0.5rem" }}
         >
-          <input
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="chess.com username"
-          />
-          <button type="submit" disabled={status === "loading"}>
-            {status === "loading" ? "Fetching..." : "Fetch games"}
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor="username">
+              Chess.com username
+            </label>
+            <input
+              id="username"
+              className={styles.input}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="jph093"
+            />
+          </div>
+          <button type="submit" className={styles.primaryButton} disabled={status === "loading"}>
+            {status === "loading" ? "Fetching…" : "Fetch games"}
           </button>
         </form>
 
-        {error && <p style={{ color: "crimson" }}>{error}</p>}
+        {status === "error" && (
+          <div className={styles.errorBlock}>
+            <p className={styles.errorHeading}>Couldn&apos;t load games</p>
+            <p>{error}</p>
+            <button className={styles.secondaryButton} onClick={fetchGames}>
+              Retry
+            </button>
+          </div>
+        )}
+
+        {status === "loading" && (
+          <div className={styles.skeletonList}>
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className={styles.skeleton} />
+            ))}
+          </div>
+        )}
+
+        {status === "idle" && hasSearched && games.length === 0 && (
+          <div className={styles.empty}>
+            <p className={styles.emptyTitle}>No games found</p>
+            <p className={styles.emptyHint}>Check the username and try again.</p>
+          </div>
+        )}
 
         {games.length > 0 && (
           <>
-            <p>{games.length} games</p>
-            <ul style={{ width: "100%" }}>
+            <p className={styles.count}>{games.length} games</p>
+            <div className={styles.list}>
               {games.map((game) => (
-                <GameRow key={game.uuid} username={username} game={game} />
+                <GameCard
+                  key={game.uuid}
+                  game={game}
+                  username={username}
+                  mistakeCount={mistakeCounts.get(game.uuid) ?? null}
+                />
               ))}
-            </ul>
+            </div>
           </>
         )}
       </main>

@@ -1,0 +1,85 @@
+.board {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  border: 1px solid var(--edge);
+}
+
+.square {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.light {
+  background: var(--sq-light);
+}
+
+.dark {
+  background: var(--sq-dark);
+}
+
+.lastMove {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--ocher-500) 32%, transparent);
+}
+
+.check {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--rust-500) 55%, transparent) 0%,
+    transparent 70%
+  );
+}
+
+.piece {
+  position: relative;
+  width: 86%;
+  height: 86%;
+}
+
+.fileLabel,
+.rankLabel {
+  position: absolute;
+  font: 600 10px var(--font-sans);
+  line-height: 1;
+  user-select: none;
+  pointer-events: none;
+}
+
+.fileLabel {
+  right: 3px;
+  bottom: 1px;
+}
+
+.rankLabel {
+  left: 3px;
+  top: 1px;
+}
+
+.light .fileLabel,
+.light .rankLabel {
+  color: color-mix(in srgb, var(--sq-dark) 55%, transparent);
+}
+
+.dark .fileLabel,
+.dark .rankLabel {
+  color: color-mix(in srgb, var(--sq-light) 55%, transparent);
+}
+
+.arrowLayer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}

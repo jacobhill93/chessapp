@@ -1,0 +1,50 @@
+.card {
+  display: block;
+  background: var(--sand);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-md);
+  padding: var(--s-4);
+  border-left: 3px solid var(--ink-3);
+  transition: box-shadow 90ms ease-out;
+}
+
+.card:hover {
+  box-shadow: var(--sh-1);
+}
+
+.win {
+  border-left-color: var(--jun-500);
+}
+
+.draw {
+  border-left-color: var(--ink-3);
+}
+
+.loss {
+  border-left-color: var(--rust-500);
+}
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s-3);
+}
+
+.opponent {
+  font: 600 15px var(--font-sans);
+  color: var(--ink);
+}
+
+.mistakes {
+  font: 600 13px var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.detail {
+  margin-top: var(--s-1);
+  font-size: 13px;
+  color: var(--ink-2);
+}

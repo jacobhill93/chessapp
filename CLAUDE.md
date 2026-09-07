@@ -325,9 +325,100 @@ stockfish-0yn0tt` and merged into this branch.
        tokens correctly in both light and dark, while the old page's own
        `.page`/`.main` surface colors are intentionally still the
        pre-existing scaffold ones, pending the next stage.
-   - **Next up**: rebuild the existing game-list page (`src/app/page.tsx`)
-     to spec (game cards, table, inputs, buttons from `DESIGN.md` section
-     5) before tackling the board component itself.
+   - **The board — DONE.** `src/app/board/`:
+     - `pieces.tsx`: flat, single-shape Staunton piece silhouettes per
+       `DESIGN.md` section 4. Sourced the real Cburnett SVG set from
+       Wikimedia Commons (`https://commons.wikimedia.org/wiki/Special:FilePath/Chess_*lt45.svg`,
+       CC BY-SA 3.0 / GFDL — licensing recorded in a comment at the top of
+       `pieces.tsx` per the doc's explicit "record the choice in the
+       repo" instruction) rather than hand-drawing a stand-in set, since
+       network access made this achievable. Flattening required real
+       vector tooling, not manual path edits: for each piece, hand-removed
+       the *decorative* interior stroke-only paths (crown creases,
+       bishop's mitre cross, rook's under-crenellation line, knight's eye
+       dots) while keeping *structural* stroke-only shapes (the king's
+       cross — without it the king isn't recognizable), then rasterized
+       the result at 600×600 (`rsvg-convert`) and re-traced it into one
+       closed silhouette path per piece (`potrace`, installed via apt
+       alongside `imagemagick` for the alpha-mask threshold step). Hit and
+       fixed a mask-polarity bug along the way: the first pass traced the
+       *background* instead of the piece (verified by rendering a contact
+       sheet of all 6 pieces before trusting the output) — fixed with
+       potrace's `--invert` flag. Final contact-sheet check confirmed all
+       6 pieces read correctly as flat silhouettes before wiring them in.
+     - `Board.tsx`/`.module.css`: renders from a FEN (via `chess.js`) —
+       correct square coloring (a1 dark), coordinates drawn inside the
+       edge squares at the spec'd opposite-square-color/55%-opacity, last-
+       move highlight, a check radial gradient, pieces at 86% of the
+       square, and an SVG-overlay best-move hint arrow. Read-only/
+       controlled by a `fen` prop — no drag-and-drop or move-making yet
+       (see scope note below).
+     - Scope trims from the full section-4 spec, deliberate: no drag-and-
+       drop or click-to-move interaction (the board is a position viewer,
+       driven by clicking moves in the move list — actually *making* a
+       move belongs to stage 6's drill flow, which has no UI yet either);
+       no JS-based "snap board size to a multiple of 8" pixel-alignment
+       (approximated with CSS `aspect-ratio: 1` instead); no premove/
+       hover/drag visual states (nothing to preview yet without
+       interaction); only the juniper best-move arrow is implemented, not
+       the separate rust "blunder marker" arrow (the move list's blunder
+       glyph plus the ocher last-move highlight already cover that
+       signal, and the blunder arrow's exact intended meaning wasn't
+       fully unambiguous from the spec alone).
+   - **Game review screen — DONE.** `src/app/games/[uuid]/page.tsx`
+     (client component, `uuid` from the route + `username` from a search
+     param) wires the board together with:
+     - `MoveList.tsx`/`.module.css`: two-column move grid, quality glyphs
+       (`!`/`?!`/`?`/`??`) mapped from the existing 5-tier
+       `MoveClassification` (best→`!`, good→no glyph, inaccuracy→`?!`,
+       mistake→`?`, blunder→`??`, matching the spec's 4-glyph scheme),
+       current-move highlighting, click-to-jump navigation.
+     - `EvalBar.tsx`/`.module.css`: vertical bar with a standard
+       cp-to-win-share sigmoid for the fill split, signed numeric readout,
+       full flip (no animation) on mate scores.
+     - Analysis is opt-in via an "Analyze this game" button rather than
+       automatic on page load, since it's a real, potentially-slow
+       Stockfish run across every move — never surprise-block on page
+       open. While running, the copy honestly says "this can take a
+       bit…" rather than the spec's ideal of real incremental depth/move
+       progress, since that would need the backend analysis loop to
+       stream progress (e.g. SSE) rather than return one blocking
+       response — a real future improvement, not built in this pass.
+     - Found and fixed a real layout bug during testing: the shell used
+       `min-height: 100vh` instead of `height: 100vh`, so the move-list
+       panel's `overflow-y: auto` never actually activated (nothing above
+       it was height-*constrained*, so it just grew to fit all content
+       instead of scrolling) — the whole page scrolled instead of just
+       the move list. Fixed by making the shell's height fixed and
+       threading `min-height: 0` through the flex chain down to the
+       scrollable panel, then verified by scripting an actual scroll and
+       screenshotting mid-scroll, not just checking the top of the page.
+   - **Library page rebuild — DONE.** `src/app/GameCard.tsx`/`.module.css`
+     + rewritten `src/app/page.tsx`/`.module.css`: Game card component per
+     spec (opponent+rating, 3px left border colored by the *searched
+     user's* outcome — win/draw/loss determined from chess.com's own
+     per-side `result` field, not raw PGN `1-0`/`0-1`/`½-½` — time class,
+     date, mistake count), the "front door" username input row (44px
+     primary button), and loading/error/empty states (pulsing skeleton
+     blocks, an inline retry block, a centered empty state). Each card
+     links to `/games/{uuid}?username=...`, replacing the old inline
+     "View moves"/eval-per-move feature from stages 3–4 (superseded by
+     the review screen above). Mistake counts come from a best-effort
+     client-side `GET /api/mistakes` call tallied by uuid — shows "—" for
+     games that haven't been analyzed yet (no new analysis is triggered
+     from the library view), a real count once a game has been opened and
+     analyzed from the review screen.
+   - Verified the whole flow end-to-end in a real browser, light and dark:
+     search → card list → open a game → step through moves (buttons, move-
+     list clicks, flip) → run analysis → see quality glyphs, eval bar, and
+     the mistake count back-propagate onto the library card.
+   - Known follow-ups, not done in this pass: the drill/replay UI (stage
+     6 has the backend, no board interaction to attempt a move yet); the
+     rust blunder-marker arrow; a real settings/nav surface to hang a
+     light/dark toggle off of; streaming analysis progress; virtualizing
+     the game list (a card is heavier DOM than the old plain `<li>`, and
+     large accounts can have thousands of games — not yet a measured
+     problem, just an unaddressed one).
 
 ## Possible future addition: Lichess puzzle database
 
