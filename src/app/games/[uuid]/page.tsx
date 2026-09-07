@@ -57,6 +57,12 @@ export default function GameReviewPage() {
         setGame(foundGame);
         setParsed(positionsData);
         setLoadStatus("idle");
+
+        // Default orientation: your own pieces at the bottom.
+        if (foundGame) {
+          const isWhite = foundGame.white.username.toLowerCase() === username.toLowerCase();
+          setFlipped(!isWhite);
+        }
       } catch (err) {
         if (cancelled) return;
         setLoadError(err instanceof Error ? err.message : "Failed to load game");
