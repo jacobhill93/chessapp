@@ -8,12 +8,23 @@ export type MoveClassification =
   | "mistake"
   | "blunder";
 
+/** Ascending severity order, matching classifyMove's thresholds. */
+export const CLASSIFICATION_SEVERITY_ORDER: MoveClassification[] = [
+  "best",
+  "good",
+  "inaccuracy",
+  "mistake",
+  "blunder",
+];
+
 export type GamePhase = "opening" | "middlegame" | "endgame";
 
 export interface MoveAnalysis {
   ply: number;
   color: "w" | "b";
   san: string;
+  fenBefore: string;
+  fenAfter: string;
   /** How much worse (in centipawns, from the mover's perspective) this move was than the engine's top choice. Never negative. */
   centipawnLoss: number;
   classification: MoveClassification;
@@ -41,14 +52,14 @@ const STARTING_POSITION_FEN =
 /** A mate score is treated as this many "centipawns", minus 1 per move to mate, so closer mates outrank farther ones. */
 const MATE_SCORE_CP = 100_000;
 
-function scoreToCentipawns(score: EngineScore | null): number {
+export function scoreToCentipawns(score: EngineScore | null): number {
   if (!score) return 0;
   if (score.type === "cp") return score.value;
-  const sign = score.value > 0 ? 1 : -1;
-  return sign * (MATE_SCORE_CP - Math.abs(score.value));
+  const sign = score.favors === "b" ? -1 : 1;
+  return sign * (MATE_SCORE_CP - score.value);
 }
 
-function classifyMove(centipawnLoss: number): MoveClassification {
+export function classifyMove(centipawnLoss: number): MoveClassification {
   if (centipawnLoss <= 10) return "best";
   if (centipawnLoss <= 50) return "good";
   if (centipawnLoss <= 100) return "inaccuracy";
@@ -108,6 +119,8 @@ export async function analyzeGame(
         ply: move.ply,
         color: move.color,
         san: move.san,
+        fenBefore: move.fenBefore,
+        fenAfter: move.fenAfter,
         centipawnLoss,
         classification: classifyMove(centipawnLoss),
         phase: classifyPhase(move.fenBefore, move.moveNumber),

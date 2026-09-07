@@ -169,9 +169,58 @@ native UCI engine process from the backend.
      analysis, not just an eval diff, and felt like a separate, bigger
      feature rather than part of a first mistake-detection pass. Revisit
      later if wanted.
-6. **Training/replay mode** — surface a flagged position, let the user
-   replay it against Stockfish from that point, track whether they find
-   the better move this time.
+6. **Training/replay mode** — DONE (backend only), pushed on
+   `claude/chess-com-api-j9dxyc`.
+   - Bug found & fixed while building this stage:
+     `EngineScore` for `type: "mate"` used to store a **signed** value
+     (positive = good for White) to encode direction. That breaks for the
+     specific case of a position that is *already checkmate* — Stockfish
+     reports `score mate 0` there (verified directly over UCI), and `0`
+     has no sign that survives `-0 === 0` in JS, let alone a JSON
+     round-trip (`JSON.stringify(-0)` → `"0"`). Every decisive
+     (checkmate-ending) game hits this on its final move, so it wasn't a
+     hypothetical — it showed up immediately when analyzing a real
+     Scholar's Mate game (the mating move `Qxf7#` was wrongly scored as a
+     200000cp "blunder" instead of `centipawnLoss: 0, classification:
+     "best"`). Fixed by changing `EngineScore` to store mate scores as an
+     **unsigned** `value` (moves to mate, ≥ 0) plus a separate `favors:
+     "w" | "b"` field, in `src/lib/stockfish.ts`. Updated the one other
+     consumer of the old signed convention, `analysis.ts`'s
+     `scoreToCentipawns`, and the existing UI's `formatScore` in
+     `src/app/page.tsx` (a mechanical fix to keep already-shipped display
+     code correct under the new type — not new UI work). Re-verified the
+     Scholar's Mate game analyzes correctly after the fix.
+   - `src/lib/mistakes.ts`: `getMistakesForUser(username, { minSeverity })`
+     lists flagged moves purely by scanning **already-cached**
+     `data/analysis/{username}/*.json` files (preferring the deepest
+     analysis per game if more than one depth was cached) — it never
+     triggers new Stockfish analysis itself. Analyzing a user's entire
+     multi-thousand-game history on demand isn't feasible synchronously
+     (see stage 5's depth/timing numbers); that's future work (a
+     background bulk-analysis job), not something stage 6 needed to
+     solve. `GET /api/mistakes?username=...&minSeverity=mistake|blunder|
+     ...` exposes this.
+   - `src/lib/drill.ts`: `attemptMove({ username, uuid, ply, from, to,
+     promotion?, depth? })` replays a flagged mistake — loads the
+     position before the original move (`fenBefore`, already stored on
+     each `MoveAnalysis` since stage 5's fenBefore/fenAfter addition),
+     validates the candidate move's legality with `chess.js` (which
+     *throws* on an illegal move in v1, not returns `null` — confirmed
+     directly), evaluates the result at the same depth as the original
+     analysis for a fair comparison, and computes the same
+     `centipawnLoss`/`classification` as the original analysis, plus
+     `foundBestMove` (matched the engine's top choice) and `improved`
+     (better than the original mistake). Every attempt — success or
+     not — is appended to a per-position history file under gitignored
+     `data/drills/{username}/{uuid}-ply{ply}.json`; an illegal move is
+     rejected with 400 and never recorded. `POST /api/drill/attempt` and
+     `GET /api/drill/history?username=...&uuid=...&ply=...` expose this.
+   - Verified end-to-end: found the engine's best move (`improved: true`,
+     `foundBestMove: true`), repeated the original blunder (`improved:
+     false`, identical centipawn loss to the original), and an illegal
+     move (400, not persisted to history) — all against the Scholar's
+     Mate game's `Nf6??` blunder.
+   - **No UI changes in this stage either**, same reasoning as stage 5.
 7. **Progress tracking / weak-spot dashboard** — aggregate mistakes over
    time (by opening, phase of game, motif) to show patterns and
    improvement.

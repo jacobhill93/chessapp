@@ -3,8 +3,17 @@ import { createInterface, Interface } from "node:readline";
 
 export interface EngineScore {
   type: "cp" | "mate";
-  /** Centipawns (or mate-in-N moves), from White's perspective regardless of side to move. */
+  /**
+   * For "cp": centipawns from White's perspective (positive = better for White).
+   * For "mate": moves until mate — always non-negative (0 = checkmate has
+   * already been delivered). See `favors` for which side wins it; a
+   * signed value can't represent this on its own since a "mate favors
+   * Black, delivered now" and "mate favors White, delivered now" score
+   * would otherwise both have to be zero.
+   */
   value: number;
+  /** Only present for "mate" scores: which side delivers/has delivered the mate. */
+  favors?: "w" | "b";
 }
 
 export interface EngineEvaluation {
@@ -99,8 +108,17 @@ export class StockfishSession {
         const value = Number(cpMatch[1]);
         p.lastScore = { type: "cp", value: p.flipSign ? -value : value };
       } else if (mateMatch) {
-        const value = Number(mateMatch[1]);
-        p.lastScore = { type: "mate", value: p.flipSign ? -value : value };
+        // Raw value is relative to the side to move: positive means that
+        // side delivers the mate, negative means they get mated. At
+        // exactly 0 (checkmate already delivered) the engine reports an
+        // unsigned 0, which always means the side to move has just been
+        // mated (there's no legal move otherwise) — handle that case
+        // explicitly rather than relying on the sign of zero.
+        const rawValue = Number(mateMatch[1]);
+        const sideToMove = p.flipSign ? "b" : "w";
+        const otherSide = sideToMove === "w" ? "b" : "w";
+        const favors = rawValue === 0 ? otherSide : rawValue > 0 ? sideToMove : otherSide;
+        p.lastScore = { type: "mate", value: Math.abs(rawValue), favors };
       }
       if (pvMatch) p.lastPv = pvMatch[1].trim().split(" ");
     } else if (line.startsWith("bestmove")) {

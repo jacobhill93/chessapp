@@ -15,7 +15,7 @@ function formatClock(seconds: number | null): string {
 
 function formatScore(score: EngineEvaluation["score"]): string {
   if (!score) return "?";
-  if (score.type === "mate") return `M${score.value}`;
+  if (score.type === "mate") return `${score.favors === "b" ? "-" : ""}M${score.value}`;
   return (score.value / 100).toFixed(2);
 }
 
