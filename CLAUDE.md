@@ -71,3 +71,13 @@ native UCI engine process from the backend.
 7. **Progress tracking / weak-spot dashboard** — aggregate mistakes over
    time (by opening, phase of game, motif) to show patterns and
    improvement.
+
+## Possible future addition: Lichess puzzle database
+
+Not yet decided/scheduled. Chess.com's API only exposes a given player's own
+games — no general puzzle or master-game datasets. If we want training
+exercises beyond the user's own flagged mistakes, Lichess publishes an open
+puzzle database (public file dump at `database.lichess.org`, no auth
+needed — millions of tactics with FEN, solution moves, rating, and themes
+like fork/pin/endgame). Would set up a Lichess API connection only if/when
+we decide we need this.
