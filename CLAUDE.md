@@ -57,9 +57,30 @@ native UCI engine process from the backend.
        `package.json` — harmless in environments with no proxy configured
        (e.g. real deployment), required here for any Node code (API
        routes, scripts) that calls external APIs during development.
-3. **Game parsing & storage model** — parse PGNs into structured
-   positions/moves (FEN, move played, clock time, etc.) so individual
-   positions can be queried later.
+3. **Game parsing & storage model** — DONE, pushed on
+   `claude/chess-com-api-j9dxyc`.
+   - Uses `chess.js` (v1) to replay each game's PGN; its verbose move
+     history already returns `before`/`after` FEN per move, so no need to
+     hand-roll board/move logic. Clock times (chess.com's `{[%clk h:mm:ss]}`
+     comments) are extracted separately via regex, in move order, and
+     zipped with the verbose move list by index — more robust than
+     chess.js's FEN-keyed comment lookup, which could misattribute on a
+     repeated position within a game.
+   - Built: `src/lib/gameParser.ts` (`parsePgn`/`parseGame` — a game's PGN
+     to a `ParsedGame` with per-ply `san`/`from`/`to`/`fenBefore`/
+     `fenAfter`/`clockSeconds`), `src/lib/positionStore.ts` (disk cache
+     under gitignored `data/positions/{username}/{uuid}.json`, keyed by
+     game uuid — parsing is cheap but games are immutable once played, so
+     no need to ever re-parse), and `src/app/api/positions/route.ts`
+     (`GET /api/positions?username=...&uuid=...`, looks the game up via
+     the existing `gameStore` cache then parses/caches it).
+   - UI: each game row in `src/app/page.tsx` has a "View moves" toggle
+     that fetches and renders the parsed move list with clock times.
+     Verified against a real 68-move game for `jph093`.
+   - Scope note: parses one game at a time, on demand — no bulk/batch
+     parsing across all of a user's games yet. That wasn't needed for this
+     stage and the plan defers bulk analysis to mistake detection (stage
+     5), by which point Stockfish (stage 4) is also in place.
 4. **Stockfish integration** — run a local Stockfish binary via UCI to
    evaluate positions: best move, eval score, centipawn loss per move.
 5. **Mistake detection** — diff the user's actual moves against

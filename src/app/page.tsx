@@ -2,7 +2,74 @@
 
 import { useState } from "react";
 import type { ChessComGame } from "@/lib/chesscom";
+import type { ParsedGame } from "@/lib/gameParser";
 import styles from "./page.module.css";
+
+function formatClock(seconds: number | null): string {
+  if (seconds === null) return "";
+  const m = Math.floor(seconds / 60);
+  const s = (seconds % 60).toFixed(1);
+  return `${m}:${s.padStart(4, "0")}`;
+}
+
+function GameRow({ username, game }: { username: string; game: ChessComGame }) {
+  const [parsed, setParsed] = useState<ParsedGame | null>(null);
+  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  async function toggleMoves() {
+    if (parsed) {
+      setParsed(null);
+      return;
+    }
+
+    setStatus("loading");
+    setError(null);
+
+    try {
+      const res = await fetch(
+        `/api/positions?username=${encodeURIComponent(username)}&uuid=${encodeURIComponent(game.uuid)}`,
+      );
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to parse game");
+      }
+
+      setParsed(data);
+      setStatus("idle");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to parse game");
+      setStatus("error");
+    }
+  }
+
+  const date = new Date(game.end_time * 1000).toLocaleDateString();
+  const result = game.pgn.match(/\[Result "(.*?)"\]/)?.[1];
+
+  return (
+    <li>
+      {date} — {game.white.username} ({game.white.rating}) vs{" "}
+      {game.black.username} ({game.black.rating}) — {game.time_class} —{" "}
+      {result}{" "}
+      <button onClick={toggleMoves} disabled={status === "loading"}>
+        {parsed ? "Hide moves" : status === "loading" ? "Parsing..." : "View moves"}
+      </button>
+      {error && <p style={{ color: "crimson" }}>{error}</p>}
+      {parsed && (
+        <ol style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+          {parsed.moves.map((move) => (
+            <li key={move.ply} style={{ listStyle: "none" }}>
+              {move.color === "w" ? `${move.moveNumber}.` : ""}
+              {move.san}
+              {move.clockSeconds !== null && ` (${formatClock(move.clockSeconds)})`}
+            </li>
+          ))}
+        </ol>
+      )}
+    </li>
+  );
+}
 
 export default function Home() {
   const [username, setUsername] = useState("jph093");
@@ -60,16 +127,9 @@ export default function Home() {
           <>
             <p>{games.length} games</p>
             <ul style={{ width: "100%" }}>
-              {games.map((game) => {
-                const date = new Date(game.end_time * 1000).toLocaleDateString();
-                return (
-                  <li key={game.uuid}>
-                    {date} — {game.white.username} ({game.white.rating}) vs{" "}
-                    {game.black.username} ({game.black.rating}) —{" "}
-                    {game.time_class} — {game.pgn.match(/\[Result "(.*?)"\]/)?.[1]}
-                  </li>
-                );
-              })}
+              {games.map((game) => (
+                <GameRow key={game.uuid} username={username} game={game} />
+              ))}
             </ul>
           </>
         )}
