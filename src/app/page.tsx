@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import type { ChessComGame } from "@/lib/chesscom";
-import type { ParsedGame } from "@/lib/gameParser";
+import type { ParsedGame, ParsedMove } from "@/lib/gameParser";
+import type { EngineEvaluation } from "@/lib/stockfish";
 import styles from "./page.module.css";
 
 function formatClock(seconds: number | null): string {
@@ -10,6 +11,54 @@ function formatClock(seconds: number | null): string {
   const m = Math.floor(seconds / 60);
   const s = (seconds % 60).toFixed(1);
   return `${m}:${s.padStart(4, "0")}`;
+}
+
+function formatScore(score: EngineEvaluation["score"]): string {
+  if (!score) return "?";
+  if (score.type === "mate") return `M${score.value}`;
+  return (score.value / 100).toFixed(2);
+}
+
+function MoveItem({ move }: { move: ParsedMove }) {
+  const [evaluation, setEvaluation] = useState<EngineEvaluation | null>(null);
+  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+
+  async function evaluate() {
+    setStatus("loading");
+
+    try {
+      const res = await fetch(
+        `/api/evaluate?fen=${encodeURIComponent(move.fenAfter)}`,
+      );
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to evaluate position");
+      }
+
+      setEvaluation(data);
+      setStatus("idle");
+    } catch {
+      setStatus("error");
+    }
+  }
+
+  return (
+    <li style={{ listStyle: "none" }}>
+      {move.color === "w" ? `${move.moveNumber}.` : ""}
+      {move.san}
+      {move.clockSeconds !== null && ` (${formatClock(move.clockSeconds)})`}{" "}
+      {evaluation ? (
+        <span>
+          [{formatScore(evaluation.score)}, best {evaluation.bestMove}]
+        </span>
+      ) : (
+        <button onClick={evaluate} disabled={status === "loading"}>
+          {status === "loading" ? "..." : status === "error" ? "retry eval" : "eval"}
+        </button>
+      )}
+    </li>
+  );
 }
 
 function GameRow({ username, game }: { username: string; game: ChessComGame }) {
@@ -59,11 +108,7 @@ function GameRow({ username, game }: { username: string; game: ChessComGame }) {
       {parsed && (
         <ol style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
           {parsed.moves.map((move) => (
-            <li key={move.ply} style={{ listStyle: "none" }}>
-              {move.color === "w" ? `${move.moveNumber}.` : ""}
-              {move.san}
-              {move.clockSeconds !== null && ` (${formatClock(move.clockSeconds)})`}
-            </li>
+            <MoveItem key={move.ply} move={move} />
           ))}
         </ol>
       )}

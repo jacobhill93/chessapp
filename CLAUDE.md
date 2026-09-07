@@ -81,8 +81,42 @@ native UCI engine process from the backend.
      parsing across all of a user's games yet. That wasn't needed for this
      stage and the plan defers bulk analysis to mistake detection (stage
      5), by which point Stockfish (stage 4) is also in place.
-4. **Stockfish integration** — run a local Stockfish binary via UCI to
-   evaluate positions: best move, eval score, centipawn loss per move.
+4. **Stockfish integration** — DONE, pushed on `claude/chess-com-api-j9dxyc`.
+   - Installed via `apt-get install stockfish` (Stockfish 16, Ubuntu
+     noble's `universe` repo). Binary lands at `/usr/games/stockfish`,
+     **not** on `PATH` by default in a plain shell — the app hardcodes
+     that path (overridable via `STOCKFISH_PATH` env var). This is a
+     system package, not a project dependency, so **any new
+     container/environment needs `apt-get install stockfish` (or
+     `STOCKFISH_PATH` pointed at another binary) before evaluation will
+     work** — it won't fail loudly at build time, only when
+     `/api/evaluate` is called and the spawn fails.
+   - Built `src/lib/stockfish.ts`: `evaluatePosition(fen, { depth? |
+     movetimeMs? })` spawns one Stockfish process per call over UCI
+     (`uci` → `isready` → `position fen ...` → `go depth N` or
+     `go movetime N`), parses the `info depth ... score cp/mate ... pv
+     ...` lines as they stream, and resolves on `bestmove`. Score is
+     normalized to **White's perspective** (Stockfish reports from the
+     side-to-move's perspective; we flip the sign when it's Black to
+     move) so scores are directly comparable across positions regardless
+     of whose turn it is — this matters for stage 5's move-by-move
+     centipawn-loss diffing.
+   - Gotcha hit during development: piping `go depth N` immediately
+     followed by `quit` to the engine's stdin (e.g. via a single
+     `printf ... | stockfish` with no delay) can make it quit before the
+     search finishes/flushes, silently dropping all `info` output. The
+     wrapper avoids this by only killing/quitting the process after
+     seeing the `bestmove` line on stdout, never on a timer or eagerly.
+   - Added `GET /api/evaluate?fen=...&depth=...` (depth optional, else
+     500ms movetime) and an "eval" button per move in the UI's move list
+     (`src/app/page.tsx`), fetching evaluation for that move's `fenAfter`
+     on click. Verified against real positions in the browser (e.g.
+     `1.e4` → `+0.24, best c7c5`).
+   - Scope note: one process per evaluation call, not a pooled/long-lived
+     engine — fine for interactive single-position lookups from the UI,
+     but stage 5's batch analysis (evaluating every position of every
+     game) should reuse a single long-lived process instead of paying
+     process-spawn overhead per position.
 5. **Mistake detection** — diff the user's actual moves against
    Stockfish's top choice per position, flag high-centipawn-loss/blunder
    moves, classify them (opening/middlegame/endgame, tactic type, etc.).
