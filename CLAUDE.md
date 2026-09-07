@@ -617,19 +617,64 @@ stockfish-0yn0tt` and merged into this branch.
      sample, which is plausible — they're rarer patterns). Not yet wired
      into `motif.ts`/the UI — that's Phase 2.
 
-   **Planned phases** (Phase 1 is the dependency for everything else):
+   **Phase 2 — DONE.** `src/lib/motif.ts` now calls the Phase 1 detectors
+   instead of relying solely on the old 4-bucket heuristic:
+   - `Motif` grew six new Lichess-named variants (`fork`, `pin`, `skewer`,
+     `discoveredAttack`, `doubleCheck`, `backRankMate`) alongside the
+     original `missed_mate`/`walked_into_mate`/`hung_material`/
+     `positional`. `discoveredAttack` is the exposed label for our
+     internal `discoveredCheck` detector key (see Phase 1's naming note
+     above on why those aren't the same scope).
+   - `classifyMotif`'s precedence, in order: (1) the existing eval-based
+     mate checks, unchanged; (2) **new** — run `detectTactics` on the
+     *engine's recommended move* from the position before the mistake
+     (`move.fenBefore` + `move.bestMove`) — this is "what tactic did the
+     player miss," and conveniently is exactly the position/move stage
+     6's drill mode already replays, so a `"fork"` tag now means "the
+     move you should have played here was literally a fork"; (3) **new**
+     — the same check against the *opponent's* likely reply
+     (`nextMove.fenBefore` + `nextMove.bestMove`) — "what tactic did the
+     mistake let the opponent execute," e.g. a mistake that got punished
+     by a pin rather than a missed tactic of the player's own; (4) the
+     original coarse `hung_material` proxy, now a fallback for plain
+     undefended-piece losses that don't match any of the six named
+     tactics; (5) `positional` catch-all, unchanged.
+   - A move can match more than one detector (e.g. a discovered check
+     that's also a fork); `TACTIC_PRIORITY` in `motif.ts` picks one,
+     rarest/most specific first (`doubleCheck` > `backRankMate` >
+     `discoveredCheck` > `skewer` > `pin` > `fork`).
+   - Malformed/terminal bestMove strings (crossing the disk-cache
+     boundary from old analysis runs) are handled defensively — a
+     `detectTactics` throw during motif classification is caught and
+     treated as "no tactic found," never a crash.
+   - Verified against real cached analysis data (45 flagged moves across
+     5 real games, `data/analysis/jph093/*.json`, no code changes to
+     that data): ran cleanly with no exceptions, and spot-checked two
+     results directly against the actual board position rather than
+     trusting the label — a `"pin"` result on move 62513cc9 ply35 traced
+     back to the opponent's best reply `Rc8`, which does genuinely pin
+     White's bishop on c5 to the queen on c4 along the c-file; a
+     `"fork"` result on move 14158213 ply18 traced back to the missed
+     `Qg5`, which does attack two simultaneously-undefended white pawns
+     (e3 and g2). Distribution across the 45 moves: 28 positional, 5
+     hung_material, 5 pin, 3 walked_into_mate, 2 missed_mate, 1 fork, 1
+     skewer — no discoveredAttack/doubleCheck/backRankMate hits in this
+     particular sample (consistent with Phase 1's real-game sweep, where
+     those three were also the rarest).
+   - No UI changes in this pass either — `weak-spots`/`mistakes` API
+     responses just carry richer motif values now; there's still no
+     dedicated weak-spots UI to update (same "no UI yet" scope note as
+     stages 5–7).
+
+   **Planned phases** (Phases 1–2 done; 3–4 remain):
    1. ~~Native detectors for fork/pin/skewer/discovered check/double
-      check (ported) + back-rank (built from scratch).~~ **DONE** — see
-      above.
-   2. Wire results into `motif.ts`, replacing/extending the 4-bucket
-      heuristic. New labels named to match Lichess's own theme strings
-      (`fork`, `pin`, `skewer`, `discoveredAttack`, `doubleCheck`,
-      `backRankMate`) from the start so there's no translation layer
-      later. **Next up.**
+      check (ported) + back-rank (built from scratch).~~ **DONE**.
+   2. ~~Wire results into `motif.ts`.~~ **DONE** — see above.
    3. Ingest the Lichess puzzle database (`database.lichess.org`, public,
       no auth) for the "drill an unrelated puzzle" mode. Millions of
       rows — flat JSON files (this project's pattern for games/analysis)
       won't hold up; needs a real index, likely SQLite, queried by theme.
+      **Next up.**
    4. New training-mode UI sourcing a puzzle FEN from that index instead
       of the user's own game, reusing stage 6's move-validation/attempt
       logic.
