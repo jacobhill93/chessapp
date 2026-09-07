@@ -65,6 +65,21 @@ stockfish-0yn0tt` and merged into this branch.
        `package.json` — harmless in environments with no proxy configured
        (e.g. real deployment), required here for any Node code (API
        routes, scripts) that calls external APIs during development.
+     - Once routed through `HTTPS_PROXY`, a second, separate issue can
+       surface: `fetch failed` / `unable to get local issuer certificate`
+       (Node error code `UNABLE_TO_GET_ISSUER_CERT_LOCALLY`). This
+       sandboxed environment's proxy re-terminates TLS (it presents its
+       own certificate for the real destination host), signed by a local
+       CA at `/root/.ccr/ca-bundle.crt` — Node's `fetch` doesn't trust
+       that CA by default, even though the container's shell environment
+       usually does (via `/etc/profile.d`), so a Node process started
+       outside that inherited environment can still fail. Fix: also set
+       `NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt`. Also baked into the
+       `dev`/`start` npm scripts alongside `NODE_USE_ENV_PROXY=1` —
+       verified harmless when the path doesn't exist (Node silently
+       ignores a missing `NODE_EXTRA_CA_CERTS` file rather than erroring),
+       so this is safe on a real machine (e.g. the developer's own
+       Windows/Mac laptop) where that path is simply absent.
 3. **Game parsing & storage model** — DONE, pushed on
    `claude/chess-com-api-j9dxyc`.
    - Uses `chess.js` (v1) to replay each game's PGN; its verbose move
