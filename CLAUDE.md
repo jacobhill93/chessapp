@@ -74,12 +74,23 @@ stockfish-0yn0tt` and merged into this branch.
        that CA by default, even though the container's shell environment
        usually does (via `/etc/profile.d`), so a Node process started
        outside that inherited environment can still fail. Fix: also set
-       `NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt`. Also baked into the
-       `dev`/`start` npm scripts alongside `NODE_USE_ENV_PROXY=1` —
-       verified harmless when the path doesn't exist (Node silently
-       ignores a missing `NODE_EXTRA_CA_CERTS` file rather than erroring),
-       so this is safe on a real machine (e.g. the developer's own
-       Windows/Mac laptop) where that path is simply absent.
+       `NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt`.
+       **Correction (found when a real user actually ran this on
+       Windows):** this was originally baked directly into the `dev`/
+       `start` npm scripts in `package.json`, on the assumption that Node
+       silently ignores a missing `NODE_EXTRA_CA_CERTS` file — that
+       assumption was wrong. On Windows, pointing `NODE_EXTRA_CA_CERTS`
+       at a nonexistent path doesn't fall back gracefully; it broke TLS
+       verification for *all* HTTPS requests (`UNABLE_TO_GET_ISSUER_CERT_LOCALLY`
+       on chess.com fetches that have nothing to do with this sandbox).
+       Fixed by removing it from `package.json` entirely and instead
+       setting it from `.claude/hooks/session-start.sh` via
+       `$CLAUDE_ENV_FILE`, gated on the cert file actually existing — so
+       it's applied only inside this sandboxed environment and never
+       ships to a real user's machine. `NODE_USE_ENV_PROXY=1` stays in
+       `package.json` since it's a genuine no-op with no proxy configured
+       (confirmed safe on the same Windows machine); it's the
+       cert-path-shaped assumption that didn't hold, not the proxy one.
 3. **Game parsing & storage model** — DONE, pushed on
    `claude/chess-com-api-j9dxyc`.
    - Uses `chess.js` (v1) to replay each game's PGN; its verbose move
