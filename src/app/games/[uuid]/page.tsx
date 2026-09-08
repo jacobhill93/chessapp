@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RotateCw } from "lucide-react";
 import { AppRail } from "@/app/AppRail";
 import { Board } from "@/app/board/Board";
@@ -10,9 +11,21 @@ import { MoveGlyphLegend, MoveList } from "./MoveList";
 import type { ChessComGame } from "@/lib/chesscom";
 import type { ParsedGame } from "@/lib/gameParser";
 import type { GameAnalysis, MoveAnalysis } from "@/lib/analysis";
+import type { EndgameConversionFinding } from "@/lib/endgameConversion";
 import styles from "./page.module.css";
 
 const STARTING_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+type AnalysisWithEndgame = GameAnalysis & { endgameFinding: EndgameConversionFinding | null };
+
+const DRAW_REASON_LABELS: Record<string, string> = {
+  "50move": "the 50-move rule",
+  repetition: "repetition",
+  stalemate: "stalemate",
+  agreed: "agreement",
+  insufficient: "insufficient material",
+  timevsinsufficient: "time vs. insufficient material",
+};
 
 export default function GameReviewPage() {
   const params = useParams<{ uuid: string }>();
@@ -22,7 +35,7 @@ export default function GameReviewPage() {
 
   const [game, setGame] = useState<ChessComGame | null>(null);
   const [parsed, setParsed] = useState<ParsedGame | null>(null);
-  const [analysis, setAnalysis] = useState<GameAnalysis | null>(null);
+  const [analysis, setAnalysis] = useState<AnalysisWithEndgame | null>(null);
   const [currentPly, setCurrentPly] = useState(0);
   const [flipped, setFlipped] = useState(false);
 
@@ -142,6 +155,26 @@ export default function GameReviewPage() {
               <span className={styles.metaDetail}>
                 {date} — {game.time_class} — {result}
               </span>
+            </div>
+          )}
+
+          {analysis?.endgameFinding && (
+            <div className={styles.endgameCallout}>
+              <p className={styles.endgameCalloutText}>
+                You reached a winning <strong>{analysis.endgameFinding.label}</strong> endgame
+                around move {Math.ceil(analysis.endgameFinding.sincePly / 2)}, but the game ended
+                in a {analysis.endgameFinding.outcome}
+                {analysis.endgameFinding.drawReason
+                  ? ` (${DRAW_REASON_LABELS[analysis.endgameFinding.drawReason] ?? analysis.endgameFinding.drawReason})`
+                  : ""}
+                .
+              </p>
+              <Link
+                href={`/train/${analysis.endgameFinding.motif}?username=${encodeURIComponent(username)}`}
+                className={styles.endgameCalloutLink}
+              >
+                Practice this endgame
+              </Link>
             </div>
           )}
 

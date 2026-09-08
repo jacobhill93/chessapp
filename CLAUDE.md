@@ -945,3 +945,103 @@ stockfish-0yn0tt` and merged into this branch.
       where stage 8's still-unbuilt light/dark toggle would live) should
       add one entry to `AppRail.tsx`'s `NAV_ITEMS`, not another
       hand-rolled rail.
+
+11. **Endgame-conversion detection** — DONE, on branch
+    `claude/ui-implementation`. Raised by the user from a real game: up a
+    full king + rook against a bare king, and it still ended in a draw.
+    That's a real weakness stage 9's tactic detectors have no way to
+    catch — every individual move can still grade as "best" (the position
+    never stopped being completely winning), so there's no bad move to
+    flag. The failure is at the *game* level ("never delivered the
+    mate"), not a per-move one, which makes this architecturally distinct
+    from everything in stage 9 despite reusing the same `/train` puzzle
+    infrastructure end to end.
+    - `src/lib/endgameConversion.ts`: `detectEndgameConversionFailure(
+      analysis, userColor, userResult)` walks an already-analyzed game's
+      moves looking for a *bare* king (nothing but a king, not even a
+      pawn) on the losing side opposite a lone rook or lone queen (pawns
+      on the winning side are fine — still trivially winning, doesn't
+      weaken the finding) — the two "classical basic checkmate" material
+      balances a chess.com game is likely to actually simplify into, out
+      of the several one could enumerate (rook and queen only for this
+      first pass; king+two-bishops and king+bishop+knight are rarer in
+      practice and, for the latter, Lichess has no single clean puzzle
+      theme to link to anyway). Requires that balance to hold for
+      `MIN_SUSTAINED_PLIES` (10) consecutive plies through to the game's
+      *last* move — checking only the material at the game's end, not
+      scanning for it anywhere mid-game, is what keeps this simple: it
+      doesn't need a separate "was the eval actually decisive" check,
+      since bare-king-vs-lone-major-piece is unambiguously winning by
+      definition, and it naturally still catches a blundered stalemate
+      (the last position keeps that exact material shape) as well as a
+      50-move-rule/repetition draw from failing to find the mate at all.
+      Returns `null` outright when `userResult === "win"` — a comfortable
+      conversion isn't a finding.
+    - Reused `chess.com`'s own per-side `result` field for the *specific*
+      draw/loss reason (`50move`, `repetition`, `stalemate`, `agreed`,
+      `insufficient`, `timevsinsufficient` — already used by
+      `GameCard.tsx`'s win/draw/loss coloring) rather than inventing a
+      new signal. Promoted the `DRAW_RESULTS` set from a private constant
+      duplicated only in `GameCard.tsx` into `src/lib/chesscom.ts` as
+      `DRAW_RESULTS`/`isDrawResult()`, and updated `GameCard.tsx` to use
+      the shared export — a small cleanup so the two didn't drift apart
+      now that a second consumer needs the exact same classification.
+    - `src/lib/motif.ts`'s `Motif` type and `MOTIF_LABELS` gained
+      `rookEndgame`/`queenEndgame` — not because `classifyMotif` ever
+      returns them (it doesn't; this is a game-level finding, not a
+      per-move one), but so both this finding and the per-move tactic
+      motifs share one vocabulary/label source feeding the same
+      `/train/[motif]` screen.
+    - `GET /api/analysis` now runs the detector after computing (or
+      loading cached) analysis and includes the result as an
+      `endgameFinding` field alongside the existing `GameAnalysis` shape,
+      rather than changing the cached `GameAnalysis` type itself — cheap
+      to (re)compute per request since it's just a scan over
+      already-computed moves, no new Stockfish calls.
+    - `src/app/games/[uuid]/page.tsx`: a callout banner (sky-blue,
+      `DESIGN.md`'s "informational chrome" tone, distinct from the rust
+      error styling and the juniper success styling used elsewhere on the
+      page) appears right below the game header whenever `endgameFinding`
+      is present, naming the endgame, the move it was reached around, and
+      the specific outcome/reason (e.g. "ended in a draw (the 50-move
+      rule)"), with a "Practice this endgame" button linking straight to
+      `/train/{motif}?username=...`. Answers the user's ask directly: the
+      theme is called out right on the analysis page, and the same click
+      lands on the *exact* `/train` puzzle screen already built in stage
+      9 — `rookEndgame`/`queenEndgame` are real, populous Lichess puzzle
+      themes (328k/71k puzzles respectively in the ingested database), so
+      this needed zero changes to `puzzleDrill.ts`/`puzzles.ts`, only new
+      motif labels for them to resolve to.
+    - Also added both to `train/page.tsx`'s `TRAINABLE_MOTIFS` for
+      consistency, and fixed a small copy bug the new labels exposed: the
+      puzzle screen's "White to move — find the {motif}" hint reads fine
+      for a tactic name ("find the fork") but not for a full endgame
+      description ("find the King + Rook vs King") — simplified to just
+      "White to move." since the motif name is already the page's own
+      title above the board.
+    - Verified two ways: (1) a unit-test sweep of
+      `detectEndgameConversionFailure` covering sustained-to-the-end
+      K+R/K+Q vs K in a draw (flags correctly, right label/ply/reason),
+      the same material but a win (correctly returns null), a fleeting
+      mid-game-only occurrence that doesn't hold to the end (correctly
+      ignored), the loser having so much as one extra pawn (correctly
+      disqualifies it), and being asked from the *losing* side's
+      perspective (correctly returns null for them); (2) live in a real
+      browser — since none of the test account's real games happen to
+      have ended this way, intercepted `GET /api/analysis` to inject a
+      synthetic `endgameFinding` onto an otherwise-real, otherwise-fully
+      analyzed cached game, confirmed the callout renders with the right
+      label/copy/link, and clicked through end-to-end to a real,
+      freshly-fetched `rookEndgame` puzzle on `/train/rookEndgame`.
+    - Deliberately out of scope for this pass, noted here rather than
+      built: king+two-bishops and king+bishop+knight material patterns;
+      folding this into the aggregate weak-spot tally
+      (`getWeakSpotSummary`) so it shows a count across *all* of a user's
+      games rather than only surfacing per-game on the review screen the
+      user happens to open (this finding is currently a live, per-request
+      computation with nowhere it's cached/aggregated); and any softer
+      "you were up a pawn in an endgame and it slipped to a draw" signal
+      — deliberately excluded since those are genuinely debatable
+      (unlike bare king vs. rook/queen, plenty of extra-pawn endings are
+      legitimately drawn), and a false "you should have won this" claim
+      would undermine trust in the feature.

@@ -12,7 +12,14 @@ export type Motif =
   | "doubleCheck"
   | "backRankMate"
   | "hung_material"
-  | "positional";
+  | "positional"
+  // Game-level endgame-conversion findings (src/lib/endgameConversion.ts).
+  // classifyMotif() below never returns these — they're per-game, not
+  // per-move — but they share this Motif/MOTIF_LABELS vocabulary since
+  // both feed the same /train/[motif] puzzle screen and Lichess theme
+  // lookup.
+  | "rookEndgame"
+  | "queenEndgame";
 
 export const MOTIF_LABELS: Record<Motif, string> = {
   missed_mate: "Missed a forced mate",
@@ -25,6 +32,8 @@ export const MOTIF_LABELS: Record<Motif, string> = {
   backRankMate: "Back-rank mate",
   hung_material: "Hung material",
   positional: "Positional drift",
+  rookEndgame: "King + Rook vs King",
+  queenEndgame: "King + Queen vs King",
 };
 
 const PIECE_VALUES: Record<PieceSymbol, number> = {

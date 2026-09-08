@@ -1,5 +1,19 @@
 const USER_AGENT = "ChessTrainingApp/0.1 (contact: jph093@gmail.com)";
 
+/** Chess.com's per-side `result` values that mean the game was a draw (as opposed to "win" or a loss code). */
+export const DRAW_RESULTS = new Set([
+  "agreed",
+  "repetition",
+  "stalemate",
+  "insufficient",
+  "50move",
+  "timevsinsufficient",
+]);
+
+export function isDrawResult(result: string): boolean {
+  return DRAW_RESULTS.has(result);
+}
+
 export interface ChessComPlayer {
   rating: number;
   result: string;

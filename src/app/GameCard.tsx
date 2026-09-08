@@ -1,21 +1,12 @@
 import Link from "next/link";
-import type { ChessComGame } from "@/lib/chesscom";
+import { isDrawResult, type ChessComGame } from "@/lib/chesscom";
 import styles from "./GameCard.module.css";
 
 type Outcome = "win" | "draw" | "loss";
 
-const DRAW_RESULTS = new Set([
-  "agreed",
-  "repetition",
-  "stalemate",
-  "insufficient",
-  "50move",
-  "timevsinsufficient",
-]);
-
 function outcomeFor(side: ChessComGame["white"]): Outcome {
   if (side.result === "win") return "win";
-  if (DRAW_RESULTS.has(side.result)) return "draw";
+  if (isDrawResult(side.result)) return "draw";
   return "loss";
 }
 

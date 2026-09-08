@@ -7,13 +7,17 @@ import type { MotifSummary } from "@/lib/weakSpots";
 import styles from "./page.module.css";
 
 /**
- * Motifs with a native tactic detector (src/lib/tactics) whose Lichess
- * theme spelling matches our own Motif value exactly (see CLAUDE.md Stage
- * 9, Phases 2–3) — these are the only ones we can source unrelated
- * training puzzles for. The eval-based motifs (missed_mate,
- * walked_into_mate) and the coarse fallbacks (hung_material, positional)
- * have no such 1:1 Lichess theme, so they show a tally here but no "Train"
- * button.
+ * Motifs with a Lichess theme to source unrelated training puzzles from —
+ * the six native tactic detectors (src/lib/tactics), whose spelling matches
+ * our own Motif value exactly (see CLAUDE.md Stage 9, Phases 2–3), plus the
+ * two endgame-conversion findings (Stage 11, src/lib/endgameConversion.ts).
+ * The eval-based motifs (missed_mate, walked_into_mate) and the coarse
+ * fallbacks (hung_material, positional) have no such 1:1 Lichess theme, so
+ * they show a tally here but no "Train" button. Note: rookEndgame/
+ * queenEndgame are game-level findings, never returned by classifyMotif,
+ * so they won't actually appear as a row here until a game with that
+ * finding has been analyzed — they're trainable via the game review
+ * page's callout in the meantime; a proper aggregate tally isn't built.
  */
 const TRAINABLE_MOTIFS = new Set([
   "fork",
@@ -22,6 +26,8 @@ const TRAINABLE_MOTIFS = new Set([
   "discoveredCheck",
   "doubleCheck",
   "backRankMate",
+  "rookEndgame",
+  "queenEndgame",
 ]);
 
 interface PuzzleProgress {

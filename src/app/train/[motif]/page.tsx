@@ -161,9 +161,7 @@ export default function PuzzleTrainPage() {
           <h2 className={styles.panelHeading}>Your move</h2>
           {status === "loading" && <p className={styles.hint}>Fetching a puzzle…</p>}
           {status === "playing" && !feedback && !solved && (
-            <p className={styles.hint}>
-              {puzzle?.toMove === "w" ? "White" : "Black"} to move — find the {motifLabel.toLowerCase()}.
-            </p>
+            <p className={styles.hint}>{puzzle?.toMove === "w" ? "White" : "Black"} to move.</p>
           )}
           {feedback?.kind === "correct" && !solved && (
             <p className={`${styles.feedback} ${styles.feedbackCorrect}`}>
