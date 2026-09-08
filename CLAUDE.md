@@ -524,8 +524,8 @@ stockfish-0yn0tt` and merged into this branch.
        rather than duplicating it) in its own panel section below the
        move list.
 
-9. **Real tactical motif detection + unrelated-puzzle drilling** — IN
-   PROGRESS, on branch `claude/ui-implementation`. Upgrades the coarse
+9. **Real tactical motif detection + unrelated-puzzle drilling** — DONE,
+   on branch `claude/ui-implementation`. Upgrades the coarse
    4-bucket motif heuristic from stage 7 (`missed_mate`/`walked_into_mate`/
    `hung_material`/`positional`) with real geometric tactic detection, and
    adds a second training mode: not just replaying your own flagged
@@ -898,3 +898,50 @@ stockfish-0yn0tt` and merged into this branch.
    Lichess-puzzle-API-instead-of-local-DB question is an open "revisit
    later," not resolved; and drag-and-drop move input was deliberately
    skipped in favor of click-to-move only.
+
+10. **Shared navigation component** — DONE, on branch
+    `claude/ui-implementation`. Raised by the user right after stage 9
+    shipped: with `/train` now a real destination, it turned out there
+    was no way to reach it from the actual UI — the library page had no
+    nav at all, the game review page's rail only linked back to the
+    library, and `/train` itself had no way back to the library either.
+    This was the "no real settings/nav surface yet" gap already flagged
+    as a known follow-up back in stage 8, now made concrete by having a
+    third top-level destination to connect.
+    - `src/app/AppRail.tsx` + `AppRail.module.css`: a single reusable
+      rail component — brand mark + a small `NAV_ITEMS` list (currently
+      Library and Train, `lucide-react`'s `Library`/`Target` icons) —
+      instead of patching three separate copy-pasted rail
+      implementations (which is what games/[uuid] and train/[motif] had
+      already drifted into after stage 8/9, each with its own duplicated
+      `.rail`/`.brand`/`.backLink` CSS). Active-item highlighting via
+      `usePathname()` (`/train` matches with `startsWith` so the puzzle
+      screen at `/train/[motif]` also shows Train as active); takes an
+      optional `username` prop and threads it onto both nav hrefs as a
+      query param, since the app has no global state/context for it —
+      every page already carries it via the URL.
+    - Replaced the bespoke rails in `src/app/games/[uuid]/page.tsx` and
+      `src/app/train/[motif]/page.tsx` with `<AppRail username={...} />`,
+      deleting their now-dead `.rail`/`.brand`/`.backLink` CSS (including
+      the responsive collapse rules at the 1100px/900px breakpoints,
+      which `AppRail.module.css` now owns once, not three times).
+    - The library page (`/`) and the weak-spots list (`/train`) had no
+      rail/shell layout at all before this — both were a single centered
+      column. Restructured both to the same `shell` (rail + scrollable
+      `main`) pattern the other two pages already used, so all four pages
+      now share one consistent app frame. Retitled the library page's
+      own heading from "Chess Training" to "Game Library" since that text
+      now lives permanently in the rail's brand mark and would otherwise
+      be a redundant duplicate on that one page.
+    - Verified live in both light and dark mode: Library → Train nav
+      link works and highlights correctly from the library page, from
+      game review, and from the puzzle screen itself; Train → Library
+      works; `username` correctly carries across every hop (confirmed by
+      landing on `/train?username=jph093` after starting from a specific
+      game review page); dark mode contrast checked on the restructured
+      `/train` page.
+    - This is explicitly meant to be extended, not a one-off: the next
+      new top-level page (e.g. a real settings surface, which is also
+      where stage 8's still-unbuilt light/dark toggle would live) should
+      add one entry to `AppRail.tsx`'s `NAV_ITEMS`, not another
+      hand-rolled rail.

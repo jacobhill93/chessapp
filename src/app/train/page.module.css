@@ -1,12 +1,21 @@
-.page {
-  min-height: 100%;
+.shell {
   display: flex;
-  justify-content: center;
+  height: 100vh;
   background: var(--bone);
-  padding: var(--s-6);
+  color: var(--ink);
+  font-family: var(--font-sans);
 }
 
 .main {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  padding: var(--s-6);
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.center {
   width: 100%;
   max-width: 900px;
   display: flex;
@@ -200,5 +209,16 @@
   }
   50% {
     opacity: 0.9;
+  }
+}
+
+@media (max-width: 900px) {
+  .shell {
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+  }
+  .main {
+    padding: var(--s-4);
   }
 }

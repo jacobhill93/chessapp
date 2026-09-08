@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { AppRail } from "@/app/AppRail";
 import type { MotifSummary } from "@/lib/weakSpots";
 import styles from "./page.module.css";
 
@@ -72,100 +73,105 @@ export default function TrainPage() {
   }
 
   return (
-    <div className={styles.page}>
+    <div className={styles.shell}>
+      <AppRail username={username} />
+
       <main className={styles.main}>
-        <h1 className={styles.title}>Train your weak spots</h1>
-        <p className={styles.subtitle}>
-          Drill puzzles that target the tactics behind your flagged mistakes.
-        </p>
+        <div className={styles.center}>
+          <h1 className={styles.title}>Train your weak spots</h1>
+          <p className={styles.subtitle}>
+            Drill puzzles that target the tactics behind your flagged mistakes.
+          </p>
 
-        <form
-          className={styles.searchRow}
-          onSubmit={(e) => {
-            e.preventDefault();
-            fetchWeakSpots();
-          }}
-        >
-          <div className={styles.field}>
-            <label className={styles.label} htmlFor="username">
-              Chess.com username
-            </label>
-            <input
-              id="username"
-              className={styles.input}
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="jph093"
-            />
-          </div>
-          <button type="submit" className={styles.primaryButton} disabled={status === "loading"}>
-            {status === "loading" ? "Fetching…" : "Fetch weak spots"}
-          </button>
-        </form>
-
-        {status === "error" && (
-          <div className={styles.errorBlock}>
-            <p className={styles.errorHeading}>Couldn&apos;t load weak spots</p>
-            <p>{error}</p>
-            <button className={styles.primaryButton} onClick={fetchWeakSpots}>
-              Retry
+          <form
+            className={styles.searchRow}
+            onSubmit={(e) => {
+              e.preventDefault();
+              fetchWeakSpots();
+            }}
+          >
+            <div className={styles.field}>
+              <label className={styles.label} htmlFor="username">
+                Chess.com username
+              </label>
+              <input
+                id="username"
+                className={styles.input}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="jph093"
+              />
+            </div>
+            <button type="submit" className={styles.primaryButton} disabled={status === "loading"}>
+              {status === "loading" ? "Fetching…" : "Fetch weak spots"}
             </button>
-          </div>
-        )}
+          </form>
 
-        {status === "loading" && (
-          <div className={styles.skeletonList}>
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className={styles.skeleton} />
-            ))}
-          </div>
-        )}
+          {status === "error" && (
+            <div className={styles.errorBlock}>
+              <p className={styles.errorHeading}>Couldn&apos;t load weak spots</p>
+              <p>{error}</p>
+              <button className={styles.primaryButton} onClick={fetchWeakSpots}>
+                Retry
+              </button>
+            </div>
+          )}
 
-        {status === "idle" && hasSearched && summary.length === 0 && (
-          <div className={styles.empty}>
-            <p className={styles.emptyTitle}>No flagged mistakes yet</p>
-            <p className={styles.emptyHint}>
-              Analyze a few games from the library first — mistakes show up here once found.
-            </p>
-          </div>
-        )}
+          {status === "loading" && (
+            <div className={styles.skeletonList}>
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className={styles.skeleton} />
+              ))}
+            </div>
+          )}
 
-        {summary.length > 0 && (
-          <div className={styles.list}>
-            {summary.map((row) => {
-              const trainable = TRAINABLE_MOTIFS.has(row.motif);
-              const progress = progressByMotif.get(row.motif);
-              return (
-                <div key={row.motif} className={styles.row}>
-                  <div className={styles.rowInfo}>
-                    <span className={styles.rowLabel}>{row.label}</span>
-                    <span className={styles.rowDetail}>
-                      <span className={styles.stat}>{row.count}</span> flagged, avg{" "}
-                      <span className={styles.stat}>{row.avgCentipawnLoss}</span>cp lost
-                      {trainable && progress && (
-                        <>
-                          {" — "}
-                          <span className={styles.stat}>{progress.solved}</span>/
-                          <span className={styles.stat}>{progress.attempted}</span> puzzles solved
-                        </>
-                      )}
-                    </span>
+          {status === "idle" && hasSearched && summary.length === 0 && (
+            <div className={styles.empty}>
+              <p className={styles.emptyTitle}>No flagged mistakes yet</p>
+              <p className={styles.emptyHint}>
+                Analyze a few games from the library first — mistakes show up here once found.
+              </p>
+            </div>
+          )}
+
+          {summary.length > 0 && (
+            <div className={styles.list}>
+              {summary.map((row) => {
+                const trainable = TRAINABLE_MOTIFS.has(row.motif);
+                const progress = progressByMotif.get(row.motif);
+                return (
+                  <div key={row.motif} className={styles.row}>
+                    <div className={styles.rowInfo}>
+                      <span className={styles.rowLabel}>{row.label}</span>
+                      <span className={styles.rowDetail}>
+                        <span className={styles.stat}>{row.count}</span> flagged, avg{" "}
+                        <span className={styles.stat}>{row.avgCentipawnLoss}</span>cp lost
+                        {trainable && progress && (
+                          <>
+                            {" — "}
+                            <span className={styles.stat}>{progress.solved}</span>/
+                            <span className={styles.stat}>{progress.attempted}</span> puzzles
+                            solved
+                          </>
+                        )}
+                      </span>
+                    </div>
+                    {trainable ? (
+                      <Link
+                        href={`/train/${row.motif}?username=${encodeURIComponent(username)}`}
+                        className={styles.trainButton}
+                      >
+                        Train
+                      </Link>
+                    ) : (
+                      <span className={styles.notTrainable}>No puzzles for this yet</span>
+                    )}
                   </div>
-                  {trainable ? (
-                    <Link
-                      href={`/train/${row.motif}?username=${encodeURIComponent(username)}`}
-                      className={styles.trainButton}
-                    >
-                      Train
-                    </Link>
-                  ) : (
-                    <span className={styles.notTrainable}>No puzzles for this yet</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );

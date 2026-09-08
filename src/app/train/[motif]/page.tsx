@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { AppRail } from "@/app/AppRail";
 import { Board, PromotionPieceType } from "@/app/board/Board";
 import { MOTIF_LABELS, Motif } from "@/lib/motif";
 import styles from "./page.module.css";
@@ -131,13 +130,7 @@ export default function PuzzleTrainPage() {
 
   return (
     <div className={styles.shell}>
-      <aside className={styles.rail}>
-        <span className={styles.brand}>Chess Training</span>
-        <Link href={`/train?username=${encodeURIComponent(username)}`} className={styles.backLink}>
-          <ArrowLeft size={16} />
-          <span>Weak spots</span>
-        </Link>
-      </aside>
+      <AppRail username={username} />
 
       <main className={styles.main}>
         <div className={styles.center}>

@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RotateCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RotateCw } from "lucide-react";
+import { AppRail } from "@/app/AppRail";
 import { Board } from "@/app/board/Board";
 import { EvalBar } from "./EvalBar";
 import { MoveGlyphLegend, MoveList } from "./MoveList";
@@ -128,13 +128,7 @@ export default function GameReviewPage() {
 
   return (
     <div className={styles.shell}>
-      <aside className={styles.rail}>
-        <span className={styles.brand}>Chess Training</span>
-        <Link href="/" className={styles.backLink}>
-          <ArrowLeft size={16} />
-          <span>Library</span>
-        </Link>
-      </aside>
+      <AppRail username={username} />
 
       <main className={styles.main}>
         <div className={styles.center}>
