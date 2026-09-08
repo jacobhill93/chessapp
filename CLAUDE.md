@@ -598,9 +598,15 @@ stockfish-0yn0tt` and merged into this branch.
      `discoveredCheck` only fires when the moved piece delivers a check
      that reveals *another* checking piece (chess-detect's own scope) —
      it does not cover a general "discovered attack" that doesn't involve
-     check at all. When mapping to Lichess's `discoveredAttack` theme in
-     Phase 2, this detector alone under-covers that theme; may need a
-     non-check variant later if that gap matters in practice.
+     check at all. **Update from Phase 3:** originally mapped this to
+     Lichess's `discoveredAttack` theme, but Lichess actually has both a
+     `discoveredAttack` theme (broad) *and* a separate `discoveredCheck`
+     theme (narrow, check-only) — confirmed by scraping
+     `lichess.org/training/themes`'s theme list during Phase 3. Our
+     detector's scope matches their `discoveredCheck` exactly, so the
+     exposed `Motif` value was corrected to `discoveredCheck` (not
+     `discoveredAttack`) before Phase 3 shipped, so the puzzle lookup in
+     Phase 4 doesn't need a translation layer here either.
    - `detectors/backRank.ts`: from-scratch back-rank mate detector (see
      tracker row above for exact scope).
    - `index.ts`: `detectTactics(fenBefore, from, to, promotion)` runs all
@@ -620,11 +626,10 @@ stockfish-0yn0tt` and merged into this branch.
    **Phase 2 — DONE.** `src/lib/motif.ts` now calls the Phase 1 detectors
    instead of relying solely on the old 4-bucket heuristic:
    - `Motif` grew six new Lichess-named variants (`fork`, `pin`, `skewer`,
-     `discoveredAttack`, `doubleCheck`, `backRankMate`) alongside the
+     `discoveredCheck`, `doubleCheck`, `backRankMate`) alongside the
      original `missed_mate`/`walked_into_mate`/`hung_material`/
-     `positional`. `discoveredAttack` is the exposed label for our
-     internal `discoveredCheck` detector key (see Phase 1's naming note
-     above on why those aren't the same scope).
+     `positional` (see Phase 1's naming note above, updated during Phase
+     3, on why `discoveredCheck` and not `discoveredAttack`).
    - `classifyMotif`'s precedence, in order: (1) the existing eval-based
      mate checks, unchanged; (2) **new** — run `detectTactics` on the
      *engine's recommended move* from the position before the mistake
@@ -658,7 +663,7 @@ stockfish-0yn0tt` and merged into this branch.
      `Qg5`, which does attack two simultaneously-undefended white pawns
      (e3 and g2). Distribution across the 45 moves: 28 positional, 5
      hung_material, 5 pin, 3 walked_into_mate, 2 missed_mate, 1 fork, 1
-     skewer — no discoveredAttack/doubleCheck/backRankMate hits in this
+     skewer — no discoveredCheck/doubleCheck/backRankMate hits in this
      particular sample (consistent with Phase 1's real-game sweep, where
      those three were also the rarest).
    - No UI changes in this pass either — `weak-spots`/`mistakes` API
@@ -666,15 +671,65 @@ stockfish-0yn0tt` and merged into this branch.
      dedicated weak-spots UI to update (same "no UI yet" scope note as
      stages 5–7).
 
-   **Planned phases** (Phases 1–2 done; 3–4 remain):
+   **Phase 3 — DONE.** Ingested the Lichess public puzzle database
+   (CC0, `database.lichess.org`) into a local SQLite index:
+   - `scripts/ingestPuzzles.mjs`: downloads
+     `lichess_db_puzzle.csv.zst` (~304MB compressed, 6.1M puzzles) to
+     `data/lichess/` (gitignored, cached — reruns skip the download unless
+     `--force`), then streams it through decompression → CSV parsing →
+     SQLite insert without ever holding the ~1GB+ decompressed CSV in
+     memory or on disk at once. Two library choices were deliberate, both
+     to avoid repeating this project's earlier native-module Windows pain
+     (the `NODE_EXTRA_CA_CERTS`/`--use-system-ca` saga in stage 2's notes):
+     `fzstd` for decompression (pure JS, no native/WASM build step, 8kB) and
+     `node:sqlite` (built into Node 22+, no extra dependency at all — this
+     project already requires Node ≥22). Both are used read-only-safe and
+     add zero native-compilation surface for a future Windows run of this
+     script.
+   - Schema: `puzzles` (id, fen, moves, rating, rating_deviation,
+     popularity, nb_plays, themes, game_url, opening_tags) plus a
+     normalized `puzzle_themes(puzzle_id, theme)` table for fast
+     "puzzles with theme X" lookups — indexes on `puzzle_themes.theme`
+     and `puzzles.rating` are built *after* the bulk insert (building them
+     incrementally across ~30M theme rows during insert was far slower
+     in testing).
+     `puzzles.fen`/`moves` are stored exactly as Lichess provides them: per
+     Lichess's own format, `moves[0]` is a "setup" move the viewer must
+     play to reach the actual puzzle position, and the real solution
+     starts at `moves[1]` — noted here for Phase 4, which will need to
+     apply that setup move before handing the position to the user.
+   - Full ingestion (all 6.1M rows) took ~2 minutes and produced a 2.8GB
+     `data/puzzles/puzzles.db` (gitignored, like everything else under
+     `data/` — never committed; anyone continuing this needs to run
+     `npm run ingest:puzzles` once locally before Phase 4's puzzle
+     features will work). `--limit N` on the script supports a fast
+     smoke-test run without waiting on the full ingest.
+   - `src/lib/puzzles.ts`: `findRandomPuzzleByTheme(theme, { minRating,
+     maxRating, excludeIds })` — a plain read-only `node:sqlite` query,
+     random pick after filtering by theme + rating band (confirmed safe:
+     every one of our six tactic motifs has 30k-780k matching puzzles in
+     the full database, so the `ORDER BY RANDOM()` only ever sorts a
+     filtered subset, never all 6.1M rows). `isPuzzleDatabaseAvailable()`
+     lets callers degrade gracefully before the DB has been ingested.
+     Confirmed the Lichess theme vocabulary (scraped from
+     `lichess.org/training/themes`) spells `fork`/`pin`/`skewer`/
+     `discoveredCheck`/`doubleCheck`/`backRankMate` identically to our own
+     `Motif` values — this is what caught and fixed the
+     `discoveredAttack`-vs-`discoveredCheck` naming mismatch noted above.
+   - `GET /api/puzzles?theme=fork[&minRating=][&maxRating=]` exposes this
+     for manual testing ahead of Phase 4's real UI. Verified against the
+     live dev server and the full 6.1M-row database: `fork`, `pin`, and
+     `backRankMate` all returned real, correctly-shaped puzzles; a missing
+     `theme` param 400s; a theme with no matches (or an unrecognized
+     theme string) 404s.
+   - No UI changes in this pass — same as Phases 1–2.
+
+   **Planned phases** (Phases 1–3 done; 4 remains):
    1. ~~Native detectors for fork/pin/skewer/discovered check/double
       check (ported) + back-rank (built from scratch).~~ **DONE**.
    2. ~~Wire results into `motif.ts`.~~ **DONE** — see above.
-   3. Ingest the Lichess puzzle database (`database.lichess.org`, public,
-      no auth) for the "drill an unrelated puzzle" mode. Millions of
-      rows — flat JSON files (this project's pattern for games/analysis)
-      won't hold up; needs a real index, likely SQLite, queried by theme.
-      **Next up.**
-   4. New training-mode UI sourcing a puzzle FEN from that index instead
-      of the user's own game, reusing stage 6's move-validation/attempt
-      logic.
+   3. ~~Ingest the Lichess puzzle database.~~ **DONE** — see above.
+   4. New training-mode UI sourcing a puzzle FEN from
+      `findRandomPuzzleByTheme` instead of the user's own game (applying
+      Lichess's "setup move" convention noted above), reusing stage 6's
+      move-validation/attempt logic. **Next up.**

@@ -8,7 +8,7 @@ export type Motif =
   | "fork"
   | "pin"
   | "skewer"
-  | "discoveredAttack"
+  | "discoveredCheck"
   | "doubleCheck"
   | "backRankMate"
   | "hung_material"
@@ -20,7 +20,7 @@ export const MOTIF_LABELS: Record<Motif, string> = {
   fork: "Fork",
   pin: "Pin",
   skewer: "Skewer",
-  discoveredAttack: "Discovered attack",
+  discoveredCheck: "Discovered check",
   doubleCheck: "Double check",
   backRankMate: "Back-rank mate",
   hung_material: "Hung material",
@@ -56,7 +56,7 @@ const TACTIC_MOTIF_LABEL: Record<NonNullable<TacticMotif>["motif"], Motif> = {
   fork: "fork",
   pin: "pin",
   skewer: "skewer",
-  discoveredCheck: "discoveredAttack",
+  discoveredCheck: "discoveredCheck",
   doubleCheck: "doubleCheck",
   backRankMate: "backRankMate",
 };
@@ -97,7 +97,7 @@ function tacticInMove(fenBefore: string, uciMove: string): Motif | undefined {
 /**
  * Tags a flagged move with the tactical pattern behind it. Checks, in
  * order: a missed or allowed forced mate (eval-based, not geometric); a
- * concrete tactic (fork/pin/skewer/discovered attack/double check/back-rank
+ * concrete tactic (fork/pin/skewer/discovered check/double check/back-rank
  * mate — see src/lib/tactics) in the move the engine recommends instead,
  * i.e. what the player missed; the same tactic check against the
  * opponent's likely reply, i.e. what the mistake let the opponent do;
