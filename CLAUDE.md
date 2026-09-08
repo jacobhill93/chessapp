@@ -724,6 +724,33 @@ stockfish-0yn0tt` and merged into this branch.
      theme string) 404s.
    - No UI changes in this pass — same as Phases 1–2.
 
+   **Revisit candidate: Lichess's own puzzle API instead of the local DB.**
+   Raised by the user after seeing what maintaining `puzzles.db` actually
+   costs (2.8GB gitignored, has to be rebuilt on every fresh clone/
+   environment/deploy — see the discussion of that tradeoff above). Tested
+   live and confirmed real: `GET https://lichess.org/api/puzzle/next?
+   angle=fork&difficulty=easier` needs no auth and returns a real,
+   rotating puzzle (confirmed different puzzle IDs across repeated calls
+   for the same angle) — this would remove the DB/ingestion/hosting
+   problem entirely. Not switched to now because it has real limitations
+   the local DB doesn't: `difficulty` is only 5 coarse buckets (easiest →
+   hardest, relative to a ~1500 baseline) instead of a precise rating
+   range like `findRandomPuzzleByTheme`'s `minRating`/`maxRating`; an
+   invalid/misspelled `angle` value is silently ignored (falls back to an
+   unfiltered random puzzle rather than erroring — confirmed live, a real
+   correctness trap if a theme name typo ever ships); no way to pass an
+   exclude-list of already-drilled puzzle ids, so repeats are more likely
+   over time; and it trades a local read for a live network dependency on
+   Lichess's uptime/latency/rate limits at request time, for every puzzle
+   fetch. Given Phase 3 was already built, tested, and working by the
+   time this came up, decided to keep the local DB as the primary path
+   for now — but this is a live "revisit later" item, not a closed
+   decision, especially if the DB-management cost (rebuild-per-environment,
+   no clean deploy story yet) turns out to matter more in practice than
+   the API's rougher edges. A reasonable middle ground floated but not
+   built: local DB primary, this API as an automatic fallback when
+   `puzzles.db` hasn't been ingested yet.
+
    **Planned phases** (Phases 1–3 done; 4 remains):
    1. ~~Native detectors for fork/pin/skewer/discovered check/double
       check (ported) + back-rank (built from scratch).~~ **DONE**.
