@@ -62,6 +62,15 @@ function rowToPuzzle(row: PuzzleRow): Puzzle {
   };
 }
 
+function getDbOrUndefined(): ReturnType<typeof getDb> | undefined {
+  try {
+    return getDb();
+  } catch (err) {
+    if (isDbMissingError(err)) return undefined;
+    throw err;
+  }
+}
+
 export interface FindPuzzleOptions {
   /** Defaults to 400 below/above a rating of 1500 if omitted entirely. */
   minRating?: number;
@@ -94,13 +103,8 @@ export function findRandomPuzzleByTheme(
   const maxRating = options.maxRating ?? 1900;
   const excludeIds = options.excludeIds ?? [];
 
-  let database: ReturnType<typeof getDb>;
-  try {
-    database = getDb();
-  } catch (err) {
-    if (isDbMissingError(err)) return undefined;
-    throw err;
-  }
+  const database = getDbOrUndefined();
+  if (!database) return undefined;
 
   const exclusionClause = excludeIds.length
     ? `AND p.id NOT IN (${excludeIds.map(() => "?").join(",")})`
@@ -120,12 +124,25 @@ export function findRandomPuzzleByTheme(
   return row ? rowToPuzzle(row) : undefined;
 }
 
+/**
+ * Looks up one puzzle by id — used to re-fetch a puzzle authoritatively
+ * when grading an attempt, rather than trusting a client-supplied FEN or
+ * solution (see src/lib/puzzleDrill.ts).
+ */
+export function getPuzzleById(id: string): Puzzle | undefined {
+  const database = getDbOrUndefined();
+  if (!database) return undefined;
+
+  const row = database
+    .prepare(
+      `SELECT id, fen, moves, rating, popularity, nb_plays, themes, game_url
+       FROM puzzles WHERE id = ?`,
+    )
+    .get(id) as PuzzleRow | undefined;
+
+  return row ? rowToPuzzle(row) : undefined;
+}
+
 export function isPuzzleDatabaseAvailable(): boolean {
-  try {
-    getDb();
-    return true;
-  } catch (err) {
-    if (isDbMissingError(err)) return false;
-    throw err;
-  }
+  return getDbOrUndefined() !== undefined;
 }

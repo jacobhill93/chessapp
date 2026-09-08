@@ -751,12 +751,93 @@ stockfish-0yn0tt` and merged into this branch.
    built: local DB primary, this API as an automatic fallback when
    `puzzles.db` hasn't been ingested yet.
 
-   **Planned phases** (Phases 1–3 done; 4 remains):
+   **Phase 4 — IN PROGRESS.** New training mode: drill an *unrelated*
+   Lichess puzzle matching a motif, instead of only replaying your own
+   flagged mistake (stage 6). Split into a backend sub-pass (done) and a
+   UI sub-pass (not started), same "verify via curl before touching UI"
+   approach as Phases 1–3. Before building, discussed and settled three
+   open questions with the user: (1) the puzzle trainer needs a real entry
+   point, so a minimal weak-spots list UI is in scope here too, not
+   deferred again; (2) move input is click-to-move only for this pass, no
+   drag-and-drop; (3) puzzle attempts get a lightweight persisted log per
+   motif (not stateless), so "N solved" can show up in that weak-spots
+   view.
+
+   **Phase 4, backend sub-pass — DONE.**
+   - Corrected one premise from the original phase-4 plan line while
+     building this: stage 6's `drill.ts`/`attemptMove` grades a candidate
+     move by re-evaluating the resulting position with Stockfish and
+     comparing centipawn loss — that only makes sense when there's no
+     predetermined "correct" move (an arbitrary mistake position). A
+     Lichess puzzle already has a known, human-vetted solution sequence,
+     so grading it is a plain comparison against that sequence — no
+     engine call needed. Built as a separate module rather than forcing a
+     fit into `drill.ts`.
+   - `src/lib/puzzles.ts` gained `getPuzzleById(id)` — needed to
+     re-fetch a puzzle authoritatively server-side when grading an
+     attempt, rather than trusting anything the client sends back
+     (a client is only ever given the current FEN, never the solution
+     array).
+   - `src/lib/puzzleDrill.ts` (new):
+     - `getPuzzlePosition(puzzle, moveIndex)` applies Lichess's
+       `moves = [setupMove, solve1, reply1, solve2, reply2, ...]`
+       convention (see Phase 3's notes) to derive the position the
+       solver needs to find solving move `moveIndex` from — moveIndex 0
+       means "just the setup move has been played."
+     - `pickPuzzleForUser(username, motif, options)` picks a puzzle for
+       that motif the user hasn't already attempted (reads their saved
+       history for the motif, passes the distinct puzzle ids as
+       `excludeIds` to `findRandomPuzzleByTheme`), and returns only
+       `{ puzzleId, fen, toMove, rating, totalMoves }` — never the
+       solution.
+     - `attemptPuzzleMove({ puzzleId, moveIndex, from, to, promotion })`
+       re-derives the authoritative pre-move position from the puzzle id
+       + moveIndex (never trusts a client-supplied FEN), validates
+       legality with `chess.js`, compares the resulting UCI move against
+       the puzzle's known solution move, and — only when correct and the
+       puzzle isn't finished — auto-plays the opponent's forced reply too
+       (so the client doesn't need separate logic for "the board also
+       moves on its own after you get it right"). A wrong move leaves
+       `fenAfter` unchanged (the illegal-feeling move is simply never
+       applied, not undone) rather than mutating state, so retry is a
+       plain re-attempt at the same `moveIndex`. Every attempt (correct
+       or not) is appended to `data/puzzleDrills/{username}/{motif}.json`
+       — same file-log pattern as stage 6's `drill.ts`, one file per
+       motif rather than per game/ply since a motif has no natural single
+       "position" to key on.
+     - `getPuzzleTrainingSummary(username, motif)` — distinct puzzles
+       attempted vs. solved, for the weak-spots UI's "N solved" readout
+       (Phase 4's UI sub-pass).
+   - Routes: `GET /api/training/puzzle?username=&motif=[&minRating=&maxRating=]`,
+     `POST /api/training/attempt`, `GET /api/training/history?username=&motif=`.
+   - Verified two ways: (1) a full scripted run against the live
+     database — wrong move correctly rejected without mutating state,
+     the real solution played move-by-move with the opponent's forced
+     replies auto-applied and SAN reported, `solved: true` correctly
+     flagged only on the final solving move, the training summary
+     correctly showing 1 attempted/1 solved, a second request correctly
+     excluding the now-attempted puzzle, and an illegal move (`a1a1`)
+     correctly rejected; (2) the same flow again over real HTTP against
+     the dev server with `curl`, including the 404 for an unknown
+     `puzzleId`.
+   - No UI changes in this sub-pass.
+
+   **Phase 4, UI sub-pass — not started.** Needs: click-to-move added to
+   `Board.tsx` (it is currently pure display — no input handling exists
+   at all) including a promotion-choice popover (auto-queening would
+   silently make puzzles whose solution is an underpromotion
+   unsolvable); a minimal weak-spots list page (`GET /api/weak-spots`
+   plus the new training-history endpoint, with a "Train" button per
+   motif) as the feature's entry point, since none of stages 5–9 built
+   one; and the puzzle-solving screen itself wiring the interactive board
+   to the training API.
+
+   **Planned phases** (Phases 1–3 done; 4 in progress):
    1. ~~Native detectors for fork/pin/skewer/discovered check/double
       check (ported) + back-rank (built from scratch).~~ **DONE**.
    2. ~~Wire results into `motif.ts`.~~ **DONE** — see above.
    3. ~~Ingest the Lichess puzzle database.~~ **DONE** — see above.
    4. New training-mode UI sourcing a puzzle FEN from
       `findRandomPuzzleByTheme` instead of the user's own game (applying
-      Lichess's "setup move" convention noted above), reusing stage 6's
-      move-validation/attempt logic. **Next up.**
+      Lichess's "setup move" convention noted above). Backend **DONE**,
+      UI **next up** (see above).
