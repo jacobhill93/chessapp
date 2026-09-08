@@ -47,6 +47,72 @@
   height: 69%;
 }
 
+.clickable {
+  cursor: pointer;
+}
+
+.selected {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--jun-700) 22%, transparent);
+  box-shadow: inset 0 0 0 2px var(--jun-700);
+}
+
+.legalDot {
+  position: absolute;
+  width: 22%;
+  height: 22%;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 24%, transparent);
+  pointer-events: none;
+}
+
+.legalCapture {
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 4px color-mix(in srgb, var(--ink) 24%, transparent);
+  pointer-events: none;
+}
+
+.promotionOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--ink) 45%, transparent);
+}
+
+.promotionPanel {
+  display: flex;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  background: var(--bone);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-2);
+}
+
+.promotionChoice {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-md);
+  background: var(--sand);
+}
+
+.promotionChoice:hover {
+  background: var(--sand-deep);
+}
+
+.promotionPiece {
+  width: 69%;
+  height: 69%;
+}
+
 .fileLabel,
 .rankLabel {
   position: absolute;

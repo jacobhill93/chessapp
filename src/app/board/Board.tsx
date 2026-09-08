@@ -1,11 +1,15 @@
 "use client";
 
-import { Chess, Square } from "chess.js";
+import { useState } from "react";
+import { Chess, Move, Square } from "chess.js";
 import { Piece, PieceType } from "./pieces";
 import styles from "./Board.module.css";
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
 const RANKS = [8, 7, 6, 5, 4, 3, 2, 1];
+
+export type PromotionPieceType = "q" | "r" | "b" | "n";
+const PROMOTION_CHOICES: PromotionPieceType[] = ["q", "r", "b", "n"];
 
 export interface BoardMove {
   from: string;
@@ -17,6 +21,9 @@ export interface BoardProps {
   lastMove?: BoardMove;
   hintMove?: BoardMove;
   flipped?: boolean;
+  /** Enables click-to-move input. Off by default so existing read-only usages (game review) are unaffected. */
+  interactive?: boolean;
+  onMove?: (from: string, to: string, promotion?: PromotionPieceType) => void;
 }
 
 function findKingSquare(chess: Chess, color: "w" | "b"): Square | null {
@@ -32,10 +39,75 @@ function findKingSquare(chess: Chess, color: "w" | "b"): Square | null {
   return null;
 }
 
-export function Board({ fen, lastMove, hintMove, flipped = false }: BoardProps) {
+export function Board({
+  fen,
+  lastMove,
+  hintMove,
+  flipped = false,
+  interactive = false,
+  onMove,
+}: BoardProps) {
   const chess = new Chess(fen);
   const board = chess.board();
   const checkedKingSquare = chess.inCheck() ? findKingSquare(chess, chess.turn()) : null;
+
+  const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
+  const [pendingPromotion, setPendingPromotion] = useState<{
+    from: Square;
+    to: Square;
+    color: "w" | "b";
+  } | null>(null);
+
+  // A new position (ours or the opponent's) invalidates any in-progress
+  // selection. Reset during render rather than in an effect (React's
+  // "adjusting state when a prop changes" pattern) so there's no
+  // stale-selection frame before the reset commits.
+  const [prevFen, setPrevFen] = useState(fen);
+  if (fen !== prevFen) {
+    setPrevFen(fen);
+    setSelectedSquare(null);
+    setPendingPromotion(null);
+  }
+
+  const legalMoves: Move[] =
+    interactive && selectedSquare ? chess.moves({ square: selectedSquare, verbose: true }) : [];
+  const destinationsByTo = new Map<string, Move[]>();
+  for (const move of legalMoves) {
+    const existing = destinationsByTo.get(move.to);
+    if (existing) existing.push(move);
+    else destinationsByTo.set(move.to, [move]);
+  }
+
+  function handleSquareClick(square: Square) {
+    if (!interactive || pendingPromotion) return;
+
+    if (selectedSquare) {
+      const candidates = destinationsByTo.get(square);
+      if (candidates && candidates.length > 0) {
+        if (candidates.length > 1) {
+          setPendingPromotion({ from: selectedSquare, to: square, color: chess.turn() });
+        } else {
+          onMove?.(selectedSquare, square, candidates[0].promotion as PromotionPieceType | undefined);
+        }
+        setSelectedSquare(null);
+        return;
+      }
+
+      if (square === selectedSquare) {
+        setSelectedSquare(null);
+        return;
+      }
+    }
+
+    const piece = chess.get(square);
+    setSelectedSquare(piece && piece.color === chess.turn() ? square : null);
+  }
+
+  function choosePromotion(promotion: PromotionPieceType) {
+    if (!pendingPromotion) return;
+    onMove?.(pendingPromotion.from, pendingPromotion.to, promotion);
+    setPendingPromotion(null);
+  }
 
   const ranks = flipped ? [...RANKS].reverse() : RANKS;
   const files = flipped ? [...FILES].reverse() : FILES;
@@ -45,13 +117,22 @@ export function Board({ fen, lastMove, hintMove, flipped = false }: BoardProps) 
       {ranks.map((rank, rowIndex) =>
         files.map((file, colIndex) => {
           const fileIndex = FILES.indexOf(file);
-          const square = `${file}${rank}`;
+          const square = `${file}${rank}` as Square;
           const isDark = (fileIndex + rank) % 2 !== 0;
           const piece = board[8 - rank][fileIndex];
           const isLastMove = lastMove && (square === lastMove.from || square === lastMove.to);
           const isCheck = square === checkedKingSquare;
           const isBottomRow = rowIndex === ranks.length - 1;
           const isLeftColumn = colIndex === 0;
+          const isSelected = square === selectedSquare;
+          const destinationCandidates = destinationsByTo.get(square);
+          const isLegalDestination = interactive && !!destinationCandidates;
+          // A destination counts as a "capture" square even when empty (en passant).
+          const isLegalCapture =
+            isLegalDestination && destinationCandidates!.some((move) => move.captured);
+          const isClickable =
+            interactive &&
+            (isLegalDestination || (piece !== null && piece.color === chess.turn()));
           const occupant = piece
             ? `, ${piece.color === "w" ? "white" : "black"} ${PIECE_NAMES[piece.type as PieceType]}`
             : "";
@@ -61,10 +142,16 @@ export function Board({ fen, lastMove, hintMove, flipped = false }: BoardProps) 
               key={square}
               role="gridcell"
               aria-label={`${square}${occupant}`}
-              className={`${styles.square} ${isDark ? styles.dark : styles.light}`}
+              className={`${styles.square} ${isDark ? styles.dark : styles.light} ${
+                isClickable ? styles.clickable : ""
+              }`}
+              onClick={interactive ? () => handleSquareClick(square) : undefined}
             >
               {isLastMove && <div className={styles.lastMove} />}
               {isCheck && <div className={styles.check} />}
+              {isSelected && <div className={styles.selected} />}
+              {isLegalDestination && !isLegalCapture && <div className={styles.legalDot} />}
+              {isLegalCapture && <div className={styles.legalCapture} />}
               {isLeftColumn && <span className={styles.rankLabel}>{rank}</span>}
               {isBottomRow && <span className={styles.fileLabel}>{file}</span>}
               {piece && (
@@ -81,6 +168,36 @@ export function Board({ fen, lastMove, hintMove, flipped = false }: BoardProps) 
       {hintMove && (
         <BestMoveArrow move={hintMove} flipped={flipped} />
       )}
+      {pendingPromotion && (
+        <PromotionPicker color={pendingPromotion.color} onChoose={choosePromotion} />
+      )}
+    </div>
+  );
+}
+
+function PromotionPicker({
+  color,
+  onChoose,
+}: {
+  color: "w" | "b";
+  onChoose: (promotion: PromotionPieceType) => void;
+}) {
+  return (
+    <div className={styles.promotionOverlay}>
+      <div className={styles.promotionPanel} role="menu" aria-label="Choose promotion piece">
+        {PROMOTION_CHOICES.map((type) => (
+          <button
+            key={type}
+            type="button"
+            role="menuitem"
+            className={styles.promotionChoice}
+            aria-label={`Promote to ${PIECE_NAMES[type]}`}
+            onClick={() => onChoose(type)}
+          >
+            <Piece type={type} color={color} className={styles.promotionPiece} />
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

@@ -822,22 +822,79 @@ stockfish-0yn0tt` and merged into this branch.
      `puzzleId`.
    - No UI changes in this sub-pass.
 
-   **Phase 4, UI sub-pass — not started.** Needs: click-to-move added to
-   `Board.tsx` (it is currently pure display — no input handling exists
-   at all) including a promotion-choice popover (auto-queening would
-   silently make puzzles whose solution is an underpromotion
-   unsolvable); a minimal weak-spots list page (`GET /api/weak-spots`
-   plus the new training-history endpoint, with a "Train" button per
-   motif) as the feature's entry point, since none of stages 5–9 built
-   one; and the puzzle-solving screen itself wiring the interactive board
-   to the training API.
+   **Phase 4, UI sub-pass — DONE.**
+   - `src/app/board/Board.tsx` gained real interactivity, its first ever
+     (it was pure display through stage 8) — a new `interactive` prop and
+     `onMove(from, to, promotion?)` callback:
+     - Click a piece of the side to move to select it; click a highlighted
+       legal destination to fire `onMove`; click the same square again or
+       an empty/opponent square to deselect. Legal destinations come
+       straight from `chess.js`'s `.moves({ square, verbose: true })`,
+       grouped by destination square so a promotion (which chess.js
+       expands into 4 separate candidate moves, one per piece choice)
+       still shows as a single highlighted square rather than 4.
+     - A destination with 2+ candidate moves (i.e. a promotion) opens a
+       `PromotionPicker` overlay instead of moving immediately — skipping
+       this and auto-queening would silently make any puzzle whose
+       solution is an underpromotion unsolvable. Verified in isolation
+       (a temporary, never-committed debug route rendering `<Board>`
+       directly on a pawn-about-to-promote FEN, deleted again right
+       after): all 4 piece choices render, clicking one reports the
+       right `promotion` letter.
+     - Selection state resets on any `fen` prop change (new position,
+       ours or the opponent's) using React's "adjust state during render
+       when a prop changes" pattern rather than a `useEffect` — the
+       project's ESLint config (`react-hooks/set-state-in-effect`) flags
+       a plain `useEffect` that calls a setter synchronously, and this
+       avoids an extra render pass anyway.
+     - New CSS states added matching `DESIGN.md`'s board interaction
+       table exactly (selected square, legal-destination dot, legal
+       capture ring) — drag-and-drop is explicitly out of scope for this
+       pass (agreed with the user before building: click-to-move only).
+   - `src/app/train/page.tsx`: the weak-spots entry point stage 5–9 never
+     built. Same front-door pattern as the library page (username input,
+     loading/error/empty states) plus a `TRAINABLE_MOTIFS` set — only the
+     six motifs with a native tactic detector (and therefore an
+     identically-spelled Lichess theme) get a "Train" button; the
+     eval-based motifs (`missed_mate`, `walked_into_mate`) and the coarse
+     fallbacks (`hung_material`, `positional`) show their tally with no
+     button, since there's no Lichess theme to query for them. Best-effort
+     fetches `GET /api/training/history` per trainable motif to show
+     "N/M puzzles solved" alongside the existing mistake tally.
+   - `src/app/train/[motif]/page.tsx`: the puzzle screen. Fetches a puzzle
+     on load, renders it on an interactive `Board` oriented to the
+     solver's side, and on each move POSTs to `/api/training/attempt`.
+     Correct moves show the opponent's auto-played reply (from the
+     attempt response's `opponentReplySan`); wrong moves show a "try
+     again" message and leave the position untouched, matching
+     `attemptPuzzleMove`'s "wrong moves don't mutate state" behavior from
+     the backend sub-pass; solving the puzzle swaps the button to "Next
+     puzzle" (calls the same puzzle-fetch, which — thanks to
+     `pickPuzzleForUser`'s history-based exclusion — won't repeat one
+     already attempted).
+   - Verified live in a real browser (not just typechecked): the
+     weak-spots list renders real tallies for `jph093` with working
+     "Train" links; a full puzzle solve end-to-end (piece selection shows
+     legal-move dots/capture rings, correct move plays the opponent's
+     reply, `solved: true` shows "Puzzle solved." and a working "Next
+     puzzle" button); a deliberate wrong move shows the retry message
+     without corrupting the position, and the puzzle is still solvable
+     immediately after; the promotion picker in isolation (above).
 
-   **Planned phases** (Phases 1–3 done; 4 in progress):
+   **Planned phases — all done.**
    1. ~~Native detectors for fork/pin/skewer/discovered check/double
       check (ported) + back-rank (built from scratch).~~ **DONE**.
    2. ~~Wire results into `motif.ts`.~~ **DONE** — see above.
    3. ~~Ingest the Lichess puzzle database.~~ **DONE** — see above.
-   4. New training-mode UI sourcing a puzzle FEN from
-      `findRandomPuzzleByTheme` instead of the user's own game (applying
-      Lichess's "setup move" convention noted above). Backend **DONE**,
-      UI **next up** (see above).
+   4. ~~New training-mode UI sourcing a puzzle FEN from
+      `findRandomPuzzleByTheme` instead of the user's own game.~~
+      **DONE** — see above (backend + UI sub-passes).
+
+   Stage 9 is complete. Follow-ups not built, raised along the way:
+   real fork/pin/skewer detection was intentionally deferred for
+   trapped-piece, hanging-capture, removing-defender, exploiting-pin, and
+   the strategic pawn-structure motifs (see the coverage tracker); a
+   back-rank *threat* (not just a delivered mate) isn't detected; the
+   Lichess-puzzle-API-instead-of-local-DB question is an open "revisit
+   later," not resolved; and drag-and-drop move input was deliberately
+   skipped in favor of click-to-move only.
